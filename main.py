@@ -79,6 +79,7 @@ async def send_random_sticker(bot, chat_id: int) -> bool:
 # ========== SCHEDULED TASKS ==========
 async def send_countdown_to_groups(bot):
     """Send countdown to all groups every 3 hours."""
+    global groups
     msg = get_countdown_message()
     active_groups = []
     
@@ -92,13 +93,13 @@ async def send_countdown_to_groups(bot):
             # Bot might have been removed
     
     # Save only active groups
-    global groups
     if set(active_groups) != groups:
         groups = set(active_groups)
         save_json(GROUPS_FILE, list(groups))
 
 async def send_countdown_to_users(bot):
     """Send countdown to DM users who enabled it."""
+    global dm_users
     msg = get_countdown_message()
     active_users = []
     
@@ -110,7 +111,7 @@ async def send_countdown_to_users(bot):
         except Exception as e:
             print(f"User {uid} error: {e}")
     
-    global dm_users
+    # Save only active users
     if set(active_users) != dm_users:
         dm_users = set(active_users)
         save_json(USERS_FILE, list(dm_users))
