@@ -16,9 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY data/ ./data/
 
-# Create non-root user
+# Create non-root user and ensure data directory is writable
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
 USER botuser
+
+# Ensure data directory exists and is writable
+RUN mkdir -p /app/data && chown -R botuser:botuser /app/data
 
 # Run
 CMD ["python", "main.py"]
