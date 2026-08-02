@@ -19,7 +19,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 # ========== CONFIG ==========
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-TARGET_DATE = datetime(2026, 8, 12, 17, 0, 0, tzinfo=timezone.utc)
+TARGET_DATE = datetime(2026, 8, 3, 12, 55, 0, tzinfo=timezone.utc)
 
 # Rate limit config
 RANDOM_COOLDOWN = 60
