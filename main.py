@@ -352,6 +352,7 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_g")],
             [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_g")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
@@ -382,6 +383,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "برای تغییر زمان‌بندی از /settings استفاده کن.",
                 parse_mode="Markdown"
             )
+        return
+    
+    # --- Close Menu ---
+    if data == "close_menu":
+        await query.edit_message_text("✅ منو بسته شد.", reply_markup=None)
         return
     
     # --- Open Settings ---
