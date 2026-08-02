@@ -46,8 +46,6 @@ def save_json(filepath: str, data):
 groups: Set[int] = set(load_json(GROUPS_FILE, []))
 dm_users: Set[int] = set(load_json(USERS_FILE, []))
 
-# Track last sent sticker per chat to avoid repeats
-last_sticker: Dict[int, str] = defaultdict(str)
 # Cached stickers from all packs
 all_stickers: List[str] = []
 stickers_loaded = False
@@ -98,19 +96,11 @@ async def send_random_sticker(bot, chat_id: int) -> bool:
         if not all_stickers:
             return False
 
-        # Pick a sticker different from the last one sent to this chat
-        last = last_sticker[chat_id]
-        candidates = [s for s in all_stickers if s != last] if last else all_stickers
-        if not candidates:
-            candidates = all_stickers
-        chosen = random.choice(candidates)
-        last_sticker[chat_id] = chosen
-
+        chosen = random.choice(all_stickers)
         await bot.send_sticker(chat_id=chat_id, sticker=chosen)
         return True
     except Exception as e:
         print(f"Sticker error for {chat_id}: {e}")
-        # Reset cache on error
         stickers_loaded = False
         return False
 
@@ -160,10 +150,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if chat.type == "private":
-        # Private chat - show options
+        # Check if deep link payload
+        if context.args and context.args[0] == "dm":
+            await dm_countdown(update, context)
+            return
+        
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-            [InlineKeyboardButton("🔔 Enable DM Countdown (/dmcountdown)", callback_data="enable_dm")]
+            [InlineKeyboardButton("🔔 Enable DM Countdown", callback_data="enable_dm")]
         ])
         
         await update.message.reply_text(
@@ -171,13 +165,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "I'm the **Re:Zero Countdown Bot** — I track Episode 12 of Season 4.\n\n"
             "**What I can do:**\n"
             "• **In groups:** Send countdown every 3 hours + random stickers\n"
-            "• **In DM:** Send countdown to you personally (use /dmcountdown)\n\n"
+            "• **In DM:** Send countdown to you personally (use /dmcountdown)\n"
+            "• **/random** — Get a random Re:Zero sticker\n\n"
             "Choose an option below:",
             reply_markup=keyboard,
             parse_mode="Markdown"
         )
     else:
-        # Group chat - just acknowledge
         await update.message.reply_text(
             "Re:Zero Countdown Bot active! 📅\n"
             "I'll send Episode 12 countdown every 3 hours."
@@ -203,6 +197,32 @@ async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "You'll receive Episode 12 countdown every 3 hours.\n\n"
             "Use /dmcountdown again to disable."
         )
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline button presses."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "enable_dm":
+        user = query.from_user
+        if user.id in dm_users:
+            dm_users.discard(user.id)
+            save_json(USERS_FILE, list(dm_users))
+            await query.edit_message_text("❌ DM countdown **disabled**. You won't receive updates.", parse_mode="Markdown")
+        else:
+            dm_users.add(user.id)
+            save_json(USERS_FILE, list(dm_users))
+            await query.edit_message_text(
+                "✅ DM countdown **enabled**!\n"
+                "You'll receive Episode 12 countdown every 3 hours.\n\n"
+                "Use /dmcountdown again to disable.",
+                parse_mode="Markdown"
+            )
+
+async def random_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a truly random sticker from all packs."""
+    chat_id = update.effective_chat.id
+    await send_random_sticker(context.bot, chat_id)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -249,6 +269,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "**Re:Zero Countdown Bot Commands**\n\n"
         "/start — Show welcome message\n"
         "/countdown — Show current countdown\n"
+        "/random — Get a random Re:Zero sticker\n"
         "/dmcountdown — Toggle DM notifications (private only)\n"
         "/help — This message\n\n"
         "**Group Features:**\n"
@@ -303,8 +324,13 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("countdown", status))
     application.add_handler(CommandHandler("dmcountdown", dm_countdown))
+    application.add_handler(CommandHandler("random", random_sticker))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(ChatMemberHandler(my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+    
+    # Callback query handler for inline buttons
+    from telegram.ext import CallbackQueryHandler
+    application.add_handler(CallbackQueryHandler(button_callback))
     
     # Lifecycle
     application.post_init = post_init
