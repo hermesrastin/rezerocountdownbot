@@ -396,8 +396,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "روی یکی از گزینه‌ها کلیک کن:"
         )
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown")],
-            [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker")],
+            [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_u")],
+            [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_u")],
             [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
