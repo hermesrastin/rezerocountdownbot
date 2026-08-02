@@ -257,6 +257,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
             [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")],
             [InlineKeyboardButton("⚙️ تنظیمات", callback_data="open_settings")],
+            [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
         ])
         
         text = (
@@ -426,6 +427,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
             [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")],
             [InlineKeyboardButton("⚙️ تنظیمات", callback_data="open_settings")],
+            [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
