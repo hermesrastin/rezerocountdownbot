@@ -4,6 +4,7 @@ import os
 import json
 import asyncio
 import random
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Set, Dict, List
@@ -11,7 +12,7 @@ from typing import Set, Dict, List
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ChatMemberHandler,
-    ContextTypes, filters
+    CallbackQueryHandler, ContextTypes, filters
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -23,6 +24,9 @@ TARGET_DATE = datetime(2026, 8, 12, 17, 0, 0, tzinfo=timezone.utc)
 # Data files
 GROUPS_FILE = "data/groups.json"
 USERS_FILE = "data/users.json"
+SETTINGS_FILE = "data/settings.json"
+LAST_SENT_FILE = "data/last_sent.json"
+
 STICKER_PACKS = [
     "rasrez_by_fStikBot",
     "b6a3b0ad87f4e5_by_anipackbot",
@@ -45,10 +49,62 @@ def save_json(filepath: str, data):
 
 groups: Set[int] = set(load_json(GROUPS_FILE, []))
 dm_users: Set[int] = set(load_json(USERS_FILE, []))
+user_settings: Dict[int, Dict] = load_json(SETTINGS_FILE, {})
+last_sent: Dict[int, Dict] = load_json(LAST_SENT_FILE, {})
 
-# Cached stickers from all packs
+# Defaults
+DEFAULT_COUNTDOWN_HOURS = 3
+DEFAULT_STICKER_MINUTES = 0  # 0 = with every countdown
+
+# Cached stickers
 all_stickers: List[str] = []
 stickers_loaded = False
+
+# ========== SETTINGS HELPERS ==========
+def get_user_settings(user_id: int) -> Dict:
+    if user_id not in user_settings:
+        user_settings[user_id] = {
+            "countdown_hours": DEFAULT_COUNTDOWN_HOURS,
+            "sticker_minutes": DEFAULT_STICKER_MINUTES,
+        }
+    return user_settings[user_id]
+
+def save_settings():
+    save_json(SETTINGS_FILE, user_settings)
+
+def get_last_sent(user_id: int) -> Dict:
+    if user_id not in last_sent:
+        last_sent[user_id] = {"countdown": 0, "sticker": 0}
+    return last_sent[user_id]
+
+def save_last_sent():
+    save_json(LAST_SENT_FILE, last_sent)
+
+def format_interval(hours: int) -> str:
+    if hours == 1:
+        return "هر ۱ ساعت"
+    elif hours == 3:
+        return "هر ۳ ساعت"
+    elif hours == 6:
+        return "هر ۶ ساعت"
+    elif hours == 12:
+        return "هر ۱۲ ساعت"
+    elif hours == 24:
+        return "هر ۲۴ ساعت"
+    return f"هر {hours} ساعت"
+
+def format_sticker_interval(minutes: int) -> str:
+    if minutes == 0:
+        return "هر بار ارسال کانت‌داون"
+    elif minutes == 10:
+        return "هر ۱۰ دقیقه"
+    elif minutes == 20:
+        return "هر ۲۰ دقیقه"
+    elif minutes == 30:
+        return "هر ۳۰ دقیقه"
+    elif minutes == 60:
+        return "هر ۱ ساعت"
+    return f"هر {minutes} دقیقه"
 
 # ========== COUNTDOWN MESSAGE ==========
 def get_countdown_message() -> str:
@@ -61,21 +117,20 @@ def get_countdown_message() -> str:
     
     days = diff.days
     hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
     
-    return f"""╔══════════════════════╗
-  ◈ Re:Zero · Season 4
-  ◈ Episode 12 Incoming
-╚══════════════════════╝
-
-  {days} days · {hours} hours
-
-  until the next episode drops
-
-╚══════════════════════╝"""
+    return (
+        "╔══════════════════════╗\n"
+        "  ◈ Re:Zero · Season 4\n"
+        "  ◈ Episode 12 Incoming\n"
+        "╚══════════════════════╝\n\n"
+        f"  {days} روز · {hours} ساعت · {minutes} دقیقه\n\n"
+        "  until the next episode drops\n\n"
+        "╚══════════════════════╝"
+    )
 
 # ========== STICKER HANDLING ==========
 async def load_all_stickers(bot):
-    """Load stickers from all packs into one big pool."""
     global all_stickers, stickers_loaded
     all_stickers = []
     for pack_name in STICKER_PACKS:
@@ -95,7 +150,6 @@ async def send_random_sticker(bot, chat_id: int) -> bool:
             await load_all_stickers(bot)
         if not all_stickers:
             return False
-
         chosen = random.choice(all_stickers)
         await bot.send_sticker(chat_id=chat_id, sticker=chosen)
         return True
@@ -104,14 +158,46 @@ async def send_random_sticker(bot, chat_id: int) -> bool:
         stickers_loaded = False
         return False
 
-# ========== SCHEDULED TASKS ==========
-async def send_countdown_to_groups(bot):
-    """Send countdown to all groups every 3 hours."""
-    global groups
+# ========== SMART SCHEDULER ==========
+async def smart_scheduler(bot):
+    """Check all users and groups, send what's due."""
+    now = time.time()
+    
+    # --- DM Users: per-user intervals ---
+    active_users = []
+    for uid in list(dm_users):
+        settings = get_user_settings(uid)
+        ls = get_last_sent(uid)
+        
+        countdown_due = (now - ls["countdown"]) >= (settings["countdown_hours"] * 3600)
+        sticker_due = settings["sticker_minutes"] == 0 or (now - ls["sticker"]) >= (settings["sticker_minutes"] * 60)
+        
+        try:
+            if countdown_due:
+                await bot.send_message(chat_id=uid, text=get_countdown_message())
+                ls["countdown"] = now
+                active_users.append(uid)
+                if sticker_due:
+                    await send_random_sticker(bot, uid)
+                    ls["sticker"] = now
+            elif sticker_due and settings["sticker_minutes"] > 0:
+                await send_random_sticker(bot, uid)
+                ls["sticker"] = now
+            active_users.append(uid)
+        except Exception as e:
+            print(f"User {uid} error: {e}")
+    
+    # Update dm_users list
+    new_dm = set(active_users)
+    if new_dm != dm_users:
+        dm_users.intersection_update(new_dm)
+        save_json(USERS_FILE, list(dm_users))
+    save_last_sent()
+    
+    # --- Groups: default 3h countdown ---
     msg = get_countdown_message()
     active_groups = []
-    
-    for gid in groups:
+    for gid in list(groups):
         try:
             await bot.send_message(chat_id=gid, text=msg)
             await send_random_sticker(bot, gid)
@@ -120,26 +206,9 @@ async def send_countdown_to_groups(bot):
             print(f"Group {gid} error: {e}")
     
     if set(active_groups) != groups:
-        groups = set(active_groups)
+        groups.clear()
+        groups.update(active_groups)
         save_json(GROUPS_FILE, list(groups))
-
-async def send_countdown_to_users(bot):
-    """Send countdown to DM users who enabled it."""
-    global dm_users
-    msg = get_countdown_message()
-    active_users = []
-    
-    for uid in dm_users:
-        try:
-            await bot.send_message(chat_id=uid, text=msg)
-            await send_random_sticker(bot, uid)
-            active_users.append(uid)
-        except Exception as e:
-            print(f"User {uid} error: {e}")
-    
-    if set(active_users) != dm_users:
-        dm_users = set(active_users)
-        save_json(USERS_FILE, list(dm_users))
 
 # ========== HANDLERS ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -151,18 +220,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await dm_countdown(update, context)
             return
         
+        settings = get_user_settings(user.id)
+        cd_text = format_interval(settings["countdown_hours"])
+        sk_text = format_sticker_interval(settings["sticker_minutes"])
+        
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-            [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")]
+            [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")],
+            [InlineKeyboardButton("⚙️ تنظیمات", callback_data="open_settings")],
         ])
         
         text = (
             f"سلام {user.first_name}! 👋\n\n"
             "من **ربات کانت‌داون Re:Zero** هستم — قسمت ۱۲ فصل ۴ رو دنبال می‌کنم.\n\n"
+            f"**وضعیت فعلی:**\n"
+            f"• کانت‌داون: {cd_text}\n"
+            f"• استیکر: {sk_text}\n\n"
             "**قابلیت‌ها:**\n"
-            "• **در گروه‌ها:** هر ۳ ساعت کانت‌داون + استیکر رندوم\n"
-            "• **در پیوی:** کانت‌داون شخصی (از /dmcountdown استفاده کن)\n"
-            "• **/random** — یه استیکر رندوم Re:Zero بفرست\n\n"
+            "• **در گروه‌ها:** کانت‌داون + استیکر رندوم\n"
+            "• **در پیوی:** کانت‌داون شخصی با تنظیمات دلخواه\n"
+            "• **/random** — یه استیکر رندوم Re:Zero\n"
+            "• **/settings** — تنظیمات ارسال\n\n"
             "یکی از گزینه‌ها رو انتخاب کن:"
         )
         
@@ -189,20 +267,50 @@ async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         dm_users.add(user.id)
         save_json(USERS_FILE, list(dm_users))
+        settings = get_user_settings(user.id)
+        cd_text = format_interval(settings["countdown_hours"])
         await update.message.reply_text(
-            "✅ کانت‌داون پیوی **فعال شد**!\n"
-            "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\n\n"
-            "برای غیرفعال کردن دوباره /dmcountdown بزن.",
+            f"✅ کانت‌داون پیوی **فعال شد**!\n"
+            f"زمان‌بندی: {cd_text}\n\n"
+            "برای تغییر زمان‌بندی از /settings استفاده کن.",
             parse_mode="Markdown"
         )
 
+async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    if chat.type != "private":
+        await update.message.reply_text("تنظیمات فقط در پیوی در دسترسه!")
+        return
+    
+    user = update.effective_user
+    s = get_user_settings(user.id)
+    
+    cd_text = format_interval(s["countdown_hours"])
+    sk_text = format_sticker_interval(s["sticker_minutes"])
+    
+    text = (
+        "⚙️ **تنظیمات ربات**\n\n"
+        f"**ارسال کانت‌داون:** {cd_text}\n"
+        f"**ارسال استیکر:** {sk_text}\n\n"
+        "روی یکی از گزینه‌ها کلیک کن:"
+    )
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown")],
+        [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker")],
+        [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
+    ])
+    
+    await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline button presses."""
     query = update.callback_query
     await query.answer()
+    data = query.data
+    user = query.from_user
     
-    if query.data == "enable_dm":
-        user = query.from_user
+    # --- Enable/Disable DM ---
+    if data == "enable_dm":
         if user.id in dm_users:
             dm_users.discard(user.id)
             save_json(USERS_FILE, list(dm_users))
@@ -213,15 +321,124 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             dm_users.add(user.id)
             save_json(USERS_FILE, list(dm_users))
+            s = get_user_settings(user.id)
+            cd_text = format_interval(s["countdown_hours"])
             await query.edit_message_text(
-                "✅ کانت‌داون پیوی **فعال شد**!\n"
-                "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\n\n"
-                "برای غیرفعال کردن دوباره /dmcountdown بزن.",
+                f"✅ کانت‌داون پیوی **فعال شد**!\n"
+                f"زمان‌بندی: {cd_text}\n\n"
+                "برای تغییر زمان‌بندی از /settings استفاده کن.",
                 parse_mode="Markdown"
             )
+        return
+    
+    # --- Open Settings ---
+    if data == "open_settings":
+        s = get_user_settings(user.id)
+        cd_text = format_interval(s["countdown_hours"])
+        sk_text = format_sticker_interval(s["sticker_minutes"])
+        
+        text = (
+            "⚙️ **تنظیمات ربات**\n\n"
+            f"**ارسال کانت‌داون:** {cd_text}\n"
+            f"**ارسال استیکر:** {sk_text}\n\n"
+            "روی یکی از گزینه‌ها کلیک کن:"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown")],
+            [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker")],
+            [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
+        ])
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        return
+    
+    # --- Back to Start ---
+    if data == "back_to_start":
+        s = get_user_settings(user.id)
+        cd_text = format_interval(s["countdown_hours"])
+        sk_text = format_sticker_interval(s["sticker_minutes"])
+        
+        text = (
+            f"سلام {user.first_name}! 👋\n\n"
+            "من **ربات کانت‌داون Re:Zero** هستم — قسمت ۱۲ فصل ۴ رو دنبال می‌کنم.\n\n"
+            f"**وضعیت فعلی:**\n"
+            f"• کانت‌داون: {cd_text}\n"
+            f"• استیکر: {sk_text}\n\n"
+            "**قابلیت‌ها:**\n"
+            "• **در گروه‌ها:** کانت‌داون + استیکر رندوم\n"
+            "• **در پیوی:** کانت‌داون شخصی با تنظیمات دلخواه\n"
+            "• **/random** — یه استیکر رندوم Re:Zero\n"
+            "• **/settings** — تنظیمات ارسال\n\n"
+            "یکی از گزینه‌ها رو انتخاب کن:"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
+            [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")],
+            [InlineKeyboardButton("⚙️ تنظیمات", callback_data="open_settings")],
+        ])
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        return
+    
+    # --- Set Countdown Interval ---
+    if data == "set_countdown":
+        text = (
+            "⏰ **زمان‌بندی کانت‌داون**\n\n"
+            "هر چند ساعت کانت‌داون برات بفرستم؟"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("۱ ساعت", callback_data="cd_1")],
+            [InlineKeyboardButton("۳ ساعت (پیش‌فرض)", callback_data="cd_3")],
+            [InlineKeyboardButton("۶ ساعت", callback_data="cd_6")],
+            [InlineKeyboardButton("۱۲ ساعت", callback_data="cd_12")],
+            [InlineKeyboardButton("۲۴ ساعت", callback_data="cd_24")],
+            [InlineKeyboardButton("🏠 بازگشت", callback_data="open_settings")],
+        ])
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        return
+    
+    if data.startswith("cd_"):
+        hours = int(data.split("_")[1])
+        if user.id not in user_settings:
+            user_settings[user.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+        user_settings[user.id]["countdown_hours"] = hours
+        save_settings()
+        
+        await query.edit_message_text(
+            f"✅ تنظیم شد!\n\nزمان‌بندی کانت‌داون: **{format_interval(hours)}**",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # --- Set Sticker Interval ---
+    if data == "set_sticker":
+        text = (
+            "🎨 **زمان‌بندی استیکر**\n\n"
+            "هر چند وقت یه استیکر رندوم برات بفرستم؟"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("۱۰ دقیقه", callback_data="sk_10")],
+            [InlineKeyboardButton("۲۰ دقیقه", callback_data="sk_20")],
+            [InlineKeyboardButton("۳۰ دقیقه", callback_data="sk_30")],
+            [InlineKeyboardButton("۱ ساعت", callback_data="sk_60")],
+            [InlineKeyboardButton("هر بار ارسال کانت‌داون (پیش‌فرض)", callback_data="sk_0")],
+            [InlineKeyboardButton("🏠 بازگشت", callback_data="open_settings")],
+        ])
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        return
+    
+    if data.startswith("sk_"):
+        minutes = int(data.split("_")[1])
+        if user.id not in user_settings:
+            user_settings[user.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+        user_settings[user.id]["sticker_minutes"] = minutes
+        save_settings()
+        
+        await query.edit_message_text(
+            f"✅ تنظیم شد!\n\nزمان‌بندی استیکر: **{format_sticker_interval(minutes)}**",
+            parse_mode="Markdown"
+        )
+        return
 
 async def random_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a truly random sticker from all packs."""
     chat_id = update.effective_chat.id
     await send_random_sticker(context.bot, chat_id)
 
@@ -230,13 +447,21 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = get_countdown_message()
     
     if chat.type == "private":
+        user = update.effective_user
+        s = get_user_settings(user.id)
         status_text = "✅ فعال" if chat.id in dm_users else "❌ غیرفعال"
-        msg += f"\n\n**وضعیت پیوی شما:** {status_text}\nبرای تغییر /dmcountdown بزن."
+        cd_text = format_interval(s["countdown_hours"])
+        sk_text = format_sticker_interval(s["sticker_minutes"])
+        msg += (
+            f"\n\n**وضعیت پیوی شما:** {status_text}\n"
+            f"**زمان‌بندی:** {cd_text}\n"
+            f"**استیکر:** {sk_text}\n\n"
+            "برای تغییر از /settings استفاده کن."
+        )
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Track when bot is added/removed from groups."""
     result = update.my_chat_member
     chat = result.chat
     new_status = result.new_chat_member.status
@@ -268,39 +493,33 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/countdown — نمایش کانت‌داون فعلی\n"
         "/random — ارسال یه استیکر رندوم Re:Zero\n"
         "/dmcountdown — فعال/غیرفعال کردن نوتیفیکیشن پیوی\n"
+        "/settings — تنظیمات زمان‌بندی ارسال\n"
         "/help — این پیام\n\n"
         "**قابلیت‌های گروه:**\n"
         "• ربات رو به گروه اضافه کن → کانت‌داون هر ۳ ساعت\n"
         "• استیکرهای رندوم Re:Zero\n\n"
         "**قابلیت‌های پیوی:**\n"
-        "• /dmcountdown → کانت‌داون شخصی هر ۳ ساعت"
+        "• /dmcountdown → کانت‌داون شخصی\n"
+        "• /settings → تنظیم زمان‌بندی دلخواه"
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
 # ========== MAIN ==========
 async def post_init(application: Application):
-    """Setup scheduler after bot starts."""
     scheduler = AsyncIOScheduler()
     
+    # Smart scheduler: check every 10 minutes
     scheduler.add_job(
-        send_countdown_to_groups,
-        IntervalTrigger(hours=3),
+        smart_scheduler,
+        IntervalTrigger(minutes=10),
         args=[application.bot],
-        id="group_countdown",
-        replace_existing=True
-    )
-    
-    scheduler.add_job(
-        send_countdown_to_users,
-        IntervalTrigger(hours=3),
-        args=[application.bot],
-        id="dm_countdown",
+        id="smart_scheduler",
         replace_existing=True
     )
     
     scheduler.start()
     application.bot_data["scheduler"] = scheduler
-    print("Scheduler started - countdown every 3 hours")
+    print("Scheduler started - smart check every 10 minutes")
 
 async def post_shutdown(application: Application):
     scheduler = application.bot_data.get("scheduler")
@@ -318,10 +537,9 @@ def main():
     application.add_handler(CommandHandler("countdown", status))
     application.add_handler(CommandHandler("dmcountdown", dm_countdown))
     application.add_handler(CommandHandler("random", random_sticker))
+    application.add_handler(CommandHandler("settings", settings))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(ChatMemberHandler(my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
-    
-    from telegram.ext import CallbackQueryHandler
     application.add_handler(CallbackQueryHandler(button_callback))
     
     application.post_init = post_init
