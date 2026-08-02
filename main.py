@@ -118,9 +118,7 @@ async def send_countdown_to_groups(bot):
             active_groups.append(gid)
         except Exception as e:
             print(f"Group {gid} error: {e}")
-            # Bot might have been removed
     
-    # Save only active groups
     if set(active_groups) != groups:
         groups = set(active_groups)
         save_json(GROUPS_FILE, list(groups))
@@ -139,7 +137,6 @@ async def send_countdown_to_users(bot):
         except Exception as e:
             print(f"User {uid} error: {e}")
     
-    # Save only active users
     if set(active_users) != dm_users:
         dm_users = set(active_users)
         save_json(USERS_FILE, list(dm_users))
@@ -150,7 +147,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if chat.type == "private":
-        # Check if deep link payload
         if context.args and context.args[0] == "dm":
             await dm_countdown(update, context)
             return
@@ -160,22 +156,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")]
         ])
         
-        await update.message.reply_text(
-            f"سلام {user.first_name}! 👋\\n\\n"
-            "من **ربات کانت‌داون Re:Zero** هستم — قسمت ۱۲ فصل ۴ رو دنبال می‌کنم.\\n\\n"
-            "**قابلیت‌ها:**\\n"
-            "• **در گروه‌ها:** هر ۳ ساعت کانت‌داون + استیکر رندوم\\n"
-            "• **در پیوی:** کانت‌داون شخصی (از /dmcountdown استفاده کن)\\n"
-            "• **/random** — یه استیکر رندوم Re:Zero بفرست\\n\\n"
-            "یکی از گزینه‌ها رو انتخاب کن:",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+        text = (
+            f"سلام {user.first_name}! 👋\n\n"
+            "من **ربات کانت‌داون Re:Zero** هستم — قسمت ۱۲ فصل ۴ رو دنبال می‌کنم.\n\n"
+            "**قابلیت‌ها:**\n"
+            "• **در گروه‌ها:** هر ۳ ساعت کانت‌داون + استیکر رندوم\n"
+            "• **در پیوی:** کانت‌داون شخصی (از /dmcountdown استفاده کن)\n"
+            "• **/random** — یه استیکر رندوم Re:Zero بفرست\n\n"
+            "یکی از گزینه‌ها رو انتخاب کن:"
         )
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
     else:
-        await update.message.reply_text(
-            "ربات کانت‌داون Re:Zero فعاله! 📅\\n"
-            "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو می‌فرستم."
-        )
+        text = "ربات کانت‌داون Re:Zero فعاله! 📅\nهر ۳ ساعت کانت‌داون قسمت ۱۲ رو می‌فرستم."
+        await update.message.reply_text(text)
 
 async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -188,14 +182,18 @@ async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.id in dm_users:
         dm_users.discard(user.id)
         save_json(USERS_FILE, list(dm_users))
-        await update.message.reply_text("❌ کانت‌داون پیوی **غیرفعال شد**. دیگه آپدیتی دریافت نمی‌کنی.")
+        await update.message.reply_text(
+            "❌ کانت‌داون پیوی **غیرفعال شد**.\nدیگه آپدیتی دریافت نمی‌کنی.",
+            parse_mode="Markdown"
+        )
     else:
         dm_users.add(user.id)
         save_json(USERS_FILE, list(dm_users))
         await update.message.reply_text(
-            "✅ کانت‌داون پیوی **فعال شد**!\\n"
-            "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\\n\\n"
-            "برای غیرفعال کردن دوباره /dmcountdown بزن."
+            "✅ کانت‌داون پیوی **فعال شد**!\n"
+            "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\n\n"
+            "برای غیرفعال کردن دوباره /dmcountdown بزن.",
+            parse_mode="Markdown"
         )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -208,13 +206,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user.id in dm_users:
             dm_users.discard(user.id)
             save_json(USERS_FILE, list(dm_users))
-            await query.edit_message_text("❌ کانت‌داون پیوی **غیرفعال شد**. دیگه آپدیتی دریافت نمی‌کنی.", parse_mode="Markdown")
+            await query.edit_message_text(
+                "❌ کانت‌داون پیوی **غیرفعال شد**.\nدیگه آپدیتی دریافت نمی‌کنی.",
+                parse_mode="Markdown"
+            )
         else:
             dm_users.add(user.id)
             save_json(USERS_FILE, list(dm_users))
             await query.edit_message_text(
-                "✅ کانت‌داون پیوی **فعال شد**!\\n"
-                "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\\n\\n"
+                "✅ کانت‌داون پیوی **فعال شد**!\n"
+                "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\n\n"
                 "برای غیرفعال کردن دوباره /dmcountdown بزن.",
                 parse_mode="Markdown"
             )
@@ -230,7 +231,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if chat.type == "private":
         status_text = "✅ فعال" if chat.id in dm_users else "❌ غیرفعال"
-        msg += f"\\n\\n**وضعیت پیوی شما:** {status_text}\\nبرای تغییر /dmcountdown بزن."
+        msg += f"\n\n**وضعیت پیوی شما:** {status_text}\nبرای تغییر /dmcountdown بزن."
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -241,23 +242,19 @@ async def my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_status = result.new_chat_member.status
     old_status = result.old_chat_member.status
     
-    # Bot was added to group
     if new_status in ("member", "administrator") and old_status in ("left", "kicked"):
         if chat.type in ("group", "supergroup"):
             groups.add(chat.id)
             save_json(GROUPS_FILE, list(groups))
             print(f"Added to group: {chat.title} ({chat.id})")
-            
-            # Send welcome message
             try:
                 await context.bot.send_message(
                     chat_id=chat.id,
-                    text="ممنون که منو اضافه کردی! 🎉\\nهر ۳ ساعت کانت‌داون قسمت ۱۲ Re:Zero رو می‌فرستم."
+                    text="ممنون که منو اضافه کردی! 🎉\nهر ۳ ساعت کانت‌داون قسمت ۱۲ Re:Zero رو می‌فرستم."
                 )
             except:
                 pass
     
-    # Bot was removed from group
     elif new_status in ("left", "kicked") and old_status in ("member", "administrator"):
         if chat.type in ("group", "supergroup"):
             groups.discard(chat.id)
@@ -265,27 +262,26 @@ async def my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"Removed from group: {chat.title} ({chat.id})")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "**دستورات ربات کانت‌داون Re:Zero**\\n\\n"
-        "/start — نمایش پیام خوش‌آمدگویی\\n"
-        "/countdown — نمایش کانت‌داون فعلی\\n"
-        "/random — ارسال یه استیکر رندوم Re:Zero\\n"
-        "/dmcountdown — فعال/غیرفعال کردن نوتیفیکیشن پیوی\\n"
-        "/help — این پیام\\n\\n"
-        "**قابلیت‌های گروه:**\\n"
-        "• ربات رو به گروه اضافه کن → کانت‌داون هر ۳ ساعت\\n"
-        "• استیکرهای رندوم Re:Zero\\n\\n"
-        "**قابلیت‌های پیوی:**\\n"
-        "• /dmcountdown → کانت‌داون شخصی هر ۳ ساعت",
-        parse_mode="Markdown"
+    text = (
+        "**دستورات ربات کانت‌داون Re:Zero**\n\n"
+        "/start — نمایش پیام خوش‌آمدگویی\n"
+        "/countdown — نمایش کانت‌داون فعلی\n"
+        "/random — ارسال یه استیکر رندوم Re:Zero\n"
+        "/dmcountdown — فعال/غیرفعال کردن نوتیفیکیشن پیوی\n"
+        "/help — این پیام\n\n"
+        "**قابلیت‌های گروه:**\n"
+        "• ربات رو به گروه اضافه کن → کانت‌داون هر ۳ ساعت\n"
+        "• استیکرهای رندوم Re:Zero\n\n"
+        "**قابلیت‌های پیوی:**\n"
+        "• /dmcountdown → کانت‌داون شخصی هر ۳ ساعت"
     )
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 # ========== MAIN ==========
 async def post_init(application: Application):
     """Setup scheduler after bot starts."""
     scheduler = AsyncIOScheduler()
     
-    # Every 3 hours for groups
     scheduler.add_job(
         send_countdown_to_groups,
         IntervalTrigger(hours=3),
@@ -294,7 +290,6 @@ async def post_init(application: Application):
         replace_existing=True
     )
     
-    # Every 3 hours for DM users
     scheduler.add_job(
         send_countdown_to_users,
         IntervalTrigger(hours=3),
@@ -317,10 +312,8 @@ def main():
         print("ERROR: BOT_TOKEN environment variable not set!")
         return
     
-    # Create application
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("countdown", status))
     application.add_handler(CommandHandler("dmcountdown", dm_countdown))
@@ -328,15 +321,12 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(ChatMemberHandler(my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
     
-    # Callback query handler for inline buttons
     from telegram.ext import CallbackQueryHandler
     application.add_handler(CallbackQueryHandler(button_callback))
     
-    # Lifecycle
     application.post_init = post_init
     application.post_shutdown = post_shutdown
     
-    # Run
     print("Bot starting...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
