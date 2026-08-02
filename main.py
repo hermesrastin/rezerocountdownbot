@@ -456,8 +456,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_settings[user.id]["countdown_hours"] = hours
         save_settings()
         
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+        ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی کانت‌داون: **{format_interval(hours)}**",
+            reply_markup=keyboard,
             parse_mode="Markdown"
         )
         return
@@ -486,8 +490,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group_settings[chat.id]["countdown_hours"] = hours
         save_group_settings()
         
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+        ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی کانت‌داون گروه: **{format_interval(hours)}**",
+            reply_markup=keyboard,
             parse_mode="Markdown"
         )
         return
@@ -516,8 +524,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_settings[user.id]["sticker_minutes"] = minutes
         save_settings()
         
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+        ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی استیکر: **{format_sticker_interval(minutes)}**",
+            reply_markup=keyboard,
             parse_mode="Markdown"
         )
         return
@@ -546,8 +558,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group_settings[chat.id]["sticker_minutes"] = minutes
         save_group_settings()
         
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+        ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی استیکر گروه: **{format_sticker_interval(minutes)}**",
+            reply_markup=keyboard,
             parse_mode="Markdown"
         )
         return
