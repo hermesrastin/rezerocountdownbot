@@ -22,9 +22,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 TARGET_DATE = datetime(2026, 8, 12, 17, 0, 0, tzinfo=timezone.utc)
 
 # Rate limit config
-RANDOM_COOLDOWN = 60        # 1 minute between uses
-SPAM_THRESHOLD = 3          # 3 spam = ban
-SPAM_BAN_DURATION = 1800    # 30 minutes ban
+RANDOM_COOLDOWN = 60
+SPAM_THRESHOLD = 3
+SPAM_BAN_DURATION = 1800
 
 # Data files
 GROUPS_FILE = "data/groups.json"
@@ -61,13 +61,13 @@ last_sent: Dict[int, Dict] = load_json(LAST_SENT_FILE, {})
 
 # Defaults
 DEFAULT_COUNTDOWN_HOURS = 3
-DEFAULT_STICKER_MINUTES = 0  # 0 = with every countdown
+DEFAULT_STICKER_MINUTES = 10
 
 # Cached stickers
 all_stickers: List[str] = []
 stickers_loaded = False
 
-# Rate limiting: key = "chat_id:user_id" -> {"last": timestamp, "spam": count, "ban_until": timestamp}
+# Rate limiting
 random_ratelimit: Dict[str, Dict] = {}
 
 # ========== SETTINGS HELPERS ==========
@@ -127,9 +127,13 @@ def format_sticker_interval(minutes: int) -> str:
         return "هر ۱ ساعت"
     return f"هر {minutes} دقیقه"
 
+def cb(label: str, data: str, active_val, this_val) -> InlineKeyboardButton:
+    """Create a button with ✅ if it's the active option."""
+    prefix = "✅ " if active_val == this_val else ""
+    return InlineKeyboardButton(f"{prefix}{label}", callback_data=data)
+
 # ========== RATE LIMITING ==========
 def check_random_rate(chat_id: int, user_id: int) -> tuple:
-    """Check rate limit for /random. Returns (allowed: bool, message: str or None)."""
     key = f"{chat_id}:{user_id}"
     now = time.time()
 
@@ -138,25 +142,21 @@ def check_random_rate(chat_id: int, user_id: int) -> tuple:
 
     rl = random_ratelimit[key]
 
-    # Check ban
     if rl["ban_until"] > 0 and now < rl["ban_until"]:
         remaining = int(rl["ban_until"] - now)
         mins = remaining // 60
         secs = remaining % 60
         return False, f"⛔ دسترسی به /random به مدت **{mins} دقیقه و {secs} ثانیه** محدود شده.\nدلیل: اسپم بیش از حد."
 
-    # Reset ban if expired
     if rl["ban_until"] > 0 and now >= rl["ban_until"]:
         rl["ban_until"] = 0
         rl["spam"] = 0
 
-    # Check cooldown
     elapsed = now - rl["last"]
     if elapsed < RANDOM_COOLDOWN:
         remaining = int(RANDOM_COOLDOWN - elapsed)
         rl["spam"] += 1
 
-        # Check spam threshold
         if rl["spam"] >= SPAM_THRESHOLD:
             rl["ban_until"] = now + SPAM_BAN_DURATION
             rl["spam"] = 0
@@ -165,7 +165,6 @@ def check_random_rate(chat_id: int, user_id: int) -> tuple:
         warns_left = SPAM_THRESHOLD - rl["spam"]
         return False, f"⏳ لطفا **{remaining} ثانیه** صبر کنید.\n({warns_left} اخطار دیگه = محدودیت ۳۰ دقیقه‌ای)"
 
-    # Allowed
     rl["last"] = now
     return True, None
 
@@ -226,10 +225,8 @@ async def send_random_sticker(bot, chat_id: int, reply_to: int = None) -> bool:
 
 # ========== SMART SCHEDULER ==========
 async def smart_scheduler(bot):
-    """Check all users and groups, send what's due."""
     now = time.time()
     
-    # --- DM Users: per-user intervals ---
     active_users = []
     for uid in list(dm_users):
         settings = get_user_settings(uid)
@@ -259,7 +256,6 @@ async def smart_scheduler(bot):
         save_json(USERS_FILE, list(dm_users))
     save_last_sent()
     
-    # --- Groups: per-group intervals ---
     msg = get_countdown_message()
     active_groups = []
     for gid in list(groups):
@@ -464,26 +460,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
     
-    # --- Back to Start (dead code, kept for safety) ---
     if data == "back_to_start":
         await query.edit_message_text("✅ منو بسته شد.", reply_markup=None)
         return
     
-    # --- Set Countdown Interval (User) ---
+    # ==================== USER COUNTDOWN ====================
     if data == "set_countdown_u":
-        text = (
-            "⏰ **زمان‌بندی کانت‌داون**\n\n"
-            "هر چند ساعت کانت‌داون برات بفرستم؟"
-        )
+        s = get_user_settings(user.id)
+        cur = s["countdown_hours"]
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("۱ ساعت", callback_data="cd_u_1")],
-            [InlineKeyboardButton("۳ ساعت (پیش‌فرض)", callback_data="cd_u_3")],
-            [InlineKeyboardButton("۶ ساعت", callback_data="cd_u_6")],
-            [InlineKeyboardButton("۱۲ ساعت", callback_data="cd_u_12")],
-            [InlineKeyboardButton("۲۴ ساعت", callback_data="cd_u_24")],
+            [cb("۱ ساعت", "cd_u_1", cur, 1)],
+            [cb("۳ ساعت (پیش‌فرض)", "cd_u_3", cur, 3)],
+            [cb("۶ ساعت", "cd_u_6", cur, 6)],
+            [cb("۱۲ ساعت", "cd_u_12", cur, 12)],
+            [cb("۲۴ ساعت", "cd_u_24", cur, 24)],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        await query.edit_message_text(
+            "⏰ **زمان‌بندی کانت‌даون**\n\nهر چند ساعت کانت‌داون برات بفرستم؟",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
         return
     
     if data.startswith("cd_u_"):
@@ -493,32 +489,41 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_settings[user.id]["countdown_hours"] = hours
         save_settings()
         
+        # Rebuild menu with new selection
+        s = get_user_settings(user.id)
+        cur = s["countdown_hours"]
         keyboard = InlineKeyboardMarkup([
+            [cb("۱ ساعت", "cd_u_1", cur, 1)],
+            [cb("۳ ساعت (پیش‌فرض)", "cd_u_3", cur, 3)],
+            [cb("۶ ساعت", "cd_u_6", cur, 6)],
+            [cb("۱۲ ساعت", "cd_u_12", cur, 12)],
+            [cb("۲۴ ساعت", "cd_u_24", cur, 24)],
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی کانت‌داون: **{format_interval(hours)}**",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+            reply_markup=keyboard, parse_mode="Markdown"
         )
         return
     
-    # --- Set Countdown Interval (Group) ---
+    # ==================== GROUP COUNTDOWN ====================
     if data == "set_countdown_g":
-        text = (
-            "⏰ **زمان‌بندی کانت‌داون**\n\n"
-            "هر چند ساعت کانت‌داون در گروه بفرستم؟"
-        )
+        chat = query.message.chat
+        s = get_group_settings(chat.id)
+        cur = s["countdown_hours"]
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("۱ ساعت", callback_data="cd_g_1")],
-            [InlineKeyboardButton("۳ ساعت (پیش‌فرض)", callback_data="cd_g_3")],
-            [InlineKeyboardButton("۶ ساعت", callback_data="cd_g_6")],
-            [InlineKeyboardButton("۱۲ ساعت", callback_data="cd_g_12")],
-            [InlineKeyboardButton("۲۴ ساعت", callback_data="cd_g_24")],
+            [cb("۱ ساعت", "cd_g_1", cur, 1)],
+            [cb("۳ ساعت (پیش‌فرض)", "cd_g_3", cur, 3)],
+            [cb("۶ ساعت", "cd_g_6", cur, 6)],
+            [cb("۱۲ ساعت", "cd_g_12", cur, 12)],
+            [cb("۲۴ ساعت", "cd_g_24", cur, 24)],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        await query.edit_message_text(
+            "⏰ **زمان‌بندی کانت‌داون**\n\nهر چند ساعت کانت‌داون در گروه بفرستم؟",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
         return
     
     if data.startswith("cd_g_"):
@@ -529,32 +534,39 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group_settings[chat.id]["countdown_hours"] = hours
         save_group_settings()
         
+        s = get_group_settings(chat.id)
+        cur = s["countdown_hours"]
         keyboard = InlineKeyboardMarkup([
+            [cb("۱ ساعت", "cd_g_1", cur, 1)],
+            [cb("۳ ساعت (پیش‌فرض)", "cd_g_3", cur, 3)],
+            [cb("۶ ساعت", "cd_g_6", cur, 6)],
+            [cb("۱۲ ساعت", "cd_g_12", cur, 12)],
+            [cb("۲۴ ساعت", "cd_g_24", cur, 24)],
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی کانت‌داون گروه: **{format_interval(hours)}**",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+            reply_markup=keyboard, parse_mode="Markdown"
         )
         return
     
-    # --- Set Sticker Interval (User) ---
+    # ==================== USER STICKER ====================
     if data == "set_sticker_u":
-        text = (
-            "🎨 **زمان‌بندی استیکر**\n\n"
-            "هر چند وقت یه استیکر رندوم برات بفرستم؟"
-        )
+        s = get_user_settings(user.id)
+        cur = s["sticker_minutes"]
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("۱۰ دقیقه", callback_data="sk_u_10")],
-            [InlineKeyboardButton("۲۰ دقیقه", callback_data="sk_u_20")],
-            [InlineKeyboardButton("۳۰ دقیقه", callback_data="sk_u_30")],
-            [InlineKeyboardButton("۱ ساعت", callback_data="sk_u_60")],
-            [InlineKeyboardButton("هر بار ارسال کانت‌داون (پیش‌فرض)", callback_data="sk_u_0")],
+            [cb("۱۰ دقیقه", "sk_u_10", cur, 10)],
+            [cb("۲۰ دقیقه", "sk_u_20", cur, 20)],
+            [cb("۳۰ دقیقه", "sk_u_30", cur, 30)],
+            [cb("۱ ساعت", "sk_u_60", cur, 60)],
+            [cb("هر بار ارسال کانت‌داون", "sk_u_0", cur, 0)],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        await query.edit_message_text(
+            "🎨 **زمان‌بندی استیکر**\n\nهر چند وقت یه استیکر رندوم برات بفرستم؟",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
         return
     
     if data.startswith("sk_u_"):
@@ -564,32 +576,40 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_settings[user.id]["sticker_minutes"] = minutes
         save_settings()
         
+        s = get_user_settings(user.id)
+        cur = s["sticker_minutes"]
         keyboard = InlineKeyboardMarkup([
+            [cb("۱۰ دقیقه", "sk_u_10", cur, 10)],
+            [cb("۲۰ دقیقه", "sk_u_20", cur, 20)],
+            [cb("۳۰ دقیقه", "sk_u_30", cur, 30)],
+            [cb("۱ ساعت", "sk_u_60", cur, 60)],
+            [cb("هر بار ارسال کانت‌داون", "sk_u_0", cur, 0)],
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی استیکر: **{format_sticker_interval(minutes)}**",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+            reply_markup=keyboard, parse_mode="Markdown"
         )
         return
     
-    # --- Set Sticker Interval (Group) ---
+    # ==================== GROUP STICKER ====================
     if data == "set_sticker_g":
-        text = (
-            "🎨 **زمان‌بندی استیکر**\n\n"
-            "هر چند وقت یه استیکر رندوم در گروه بفرستم؟"
-        )
+        chat = query.message.chat
+        s = get_group_settings(chat.id)
+        cur = s["sticker_minutes"]
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("۱۰ دقیقه", callback_data="sk_g_10")],
-            [InlineKeyboardButton("۲۰ دقیقه", callback_data="sk_g_20")],
-            [InlineKeyboardButton("۳۰ دقیقه", callback_data="sk_g_30")],
-            [InlineKeyboardButton("۱ ساعت", callback_data="sk_g_60")],
-            [InlineKeyboardButton("هر بار ارسال کانت‌داون (پیش‌فرض)", callback_data="sk_g_0")],
+            [cb("۱۰ دقیقه", "sk_g_10", cur, 10)],
+            [cb("۲۰ دقیقه", "sk_g_20", cur, 20)],
+            [cb("۳۰ دقیقه", "sk_g_30", cur, 30)],
+            [cb("۱ ساعت", "sk_g_60", cur, 60)],
+            [cb("هر بار ارسال کانت‌داون", "sk_g_0", cur, 0)],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        await query.edit_message_text(
+            "🎨 **زمان‌بندی استیکر**\n\nهر چند وقت یه استیکر رندوم در گروه بفرستم؟",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
         return
     
     if data.startswith("sk_g_"):
@@ -600,14 +620,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group_settings[chat.id]["sticker_minutes"] = minutes
         save_group_settings()
         
+        s = get_group_settings(chat.id)
+        cur = s["sticker_minutes"]
         keyboard = InlineKeyboardMarkup([
+            [cb("۱۰ دقیقه", "sk_g_10", cur, 10)],
+            [cb("۲۰ دقیقه", "sk_g_20", cur, 20)],
+            [cb("۳۰ دقیقه", "sk_g_30", cur, 30)],
+            [cb("۱ ساعت", "sk_g_60", cur, 60)],
+            [cb("هر بار ارسال کانت‌داون", "sk_g_0", cur, 0)],
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
             [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی استیکر گروه: **{format_sticker_interval(minutes)}**",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
+            reply_markup=keyboard, parse_mode="Markdown"
         )
         return
 
@@ -617,18 +643,13 @@ async def random_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = chat.id
     reply_to = None
 
-    # Rate limiting only in groups
     if chat.type in ("group", "supergroup"):
         allowed, msg = check_random_rate(chat_id, user.id)
         if not allowed:
             await update.message.reply_text(msg, parse_mode="Markdown")
             return
-        
-        # If command is a reply to a message, forward sticker as reply
         if update.message and update.message.reply_to_message:
             reply_to = update.message.reply_to_message.message_id
-    
-    # In DM, no rate limit but still support reply
     elif chat.type == "private":
         if update.message and update.message.reply_to_message:
             reply_to = update.message.reply_to_message.message_id
