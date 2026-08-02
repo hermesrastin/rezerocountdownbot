@@ -156,25 +156,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-            [InlineKeyboardButton("🔔 Enable DM Countdown", callback_data="enable_dm")]
+            [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
+            [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")]
         ])
         
         await update.message.reply_text(
-            f"Hey {user.first_name}! 👋\n\n"
-            "I'm the **Re:Zero Countdown Bot** — I track Episode 12 of Season 4.\n\n"
-            "**What I can do:**\n"
-            "• **In groups:** Send countdown every 3 hours + random stickers\n"
-            "• **In DM:** Send countdown to you personally (use /dmcountdown)\n"
-            "• **/random** — Get a random Re:Zero sticker\n\n"
-            "Choose an option below:",
+            f"سلام {user.first_name}! 👋\\n\\n"
+            "من **ربات کانت‌داون Re:Zero** هستم — قسمت ۱۲ فصل ۴ رو دنبال می‌کنم.\\n\\n"
+            "**قابلیت‌ها:**\\n"
+            "• **در گروه‌ها:** هر ۳ ساعت کانت‌داون + استیکر رندوم\\n"
+            "• **در پیوی:** کانت‌داون شخصی (از /dmcountdown استفاده کن)\\n"
+            "• **/random** — یه استیکر رندوم Re:Zero بفرست\\n\\n"
+            "یکی از گزینه‌ها رو انتخاب کن:",
             reply_markup=keyboard,
             parse_mode="Markdown"
         )
     else:
         await update.message.reply_text(
-            "Re:Zero Countdown Bot active! 📅\n"
-            "I'll send Episode 12 countdown every 3 hours."
+            "ربات کانت‌داون Re:Zero فعاله! 📅\\n"
+            "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو می‌فرستم."
         )
 
 async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -182,20 +182,20 @@ async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if chat.type != "private":
-        await update.message.reply_text("This command only works in private chat!")
+        await update.message.reply_text("این دستور فقط در پیوی کار می‌کنه!")
         return
     
     if user.id in dm_users:
         dm_users.discard(user.id)
         save_json(USERS_FILE, list(dm_users))
-        await update.message.reply_text("❌ DM countdown **disabled**. You won't receive updates.")
+        await update.message.reply_text("❌ کانت‌داون پیوی **غیرفعال شد**. دیگه آپدیتی دریافت نمی‌کنی.")
     else:
         dm_users.add(user.id)
         save_json(USERS_FILE, list(dm_users))
         await update.message.reply_text(
-            "✅ DM countdown **enabled**!\n"
-            "You'll receive Episode 12 countdown every 3 hours.\n\n"
-            "Use /dmcountdown again to disable."
+            "✅ کانت‌داون پیوی **فعال شد**!\\n"
+            "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\\n\\n"
+            "برای غیرفعال کردن دوباره /dmcountdown بزن."
         )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -208,14 +208,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user.id in dm_users:
             dm_users.discard(user.id)
             save_json(USERS_FILE, list(dm_users))
-            await query.edit_message_text("❌ DM countdown **disabled**. You won't receive updates.", parse_mode="Markdown")
+            await query.edit_message_text("❌ کانت‌داون پیوی **غیرفعال شد**. دیگه آپدیتی دریافت نمی‌کنی.", parse_mode="Markdown")
         else:
             dm_users.add(user.id)
             save_json(USERS_FILE, list(dm_users))
             await query.edit_message_text(
-                "✅ DM countdown **enabled**!\n"
-                "You'll receive Episode 12 countdown every 3 hours.\n\n"
-                "Use /dmcountdown again to disable.",
+                "✅ کانت‌داون پیوی **فعال شد**!\\n"
+                "هر ۳ ساعت کانت‌داون قسمت ۱۲ رو دریافت می‌کنی.\\n\\n"
+                "برای غیرفعال کردن دوباره /dmcountdown بزن.",
                 parse_mode="Markdown"
             )
 
@@ -229,8 +229,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = get_countdown_message()
     
     if chat.type == "private":
-        status_text = "✅ Enabled" if chat.id in dm_users else "❌ Disabled"
-        msg += f"\n\n**Your DM Status:** {status_text}\nUse /dmcountdown to toggle."
+        status_text = "✅ فعال" if chat.id in dm_users else "❌ غیرفعال"
+        msg += f"\\n\\n**وضعیت پیوی شما:** {status_text}\\nبرای تغییر /dmcountdown بزن."
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -252,7 +252,7 @@ async def my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(
                     chat_id=chat.id,
-                    text="Thanks for adding me! 🎉\nI'll send Re:Zero Episode 12 countdown every 3 hours."
+                    text="ممنون که منو اضافه کردی! 🎉\\nهر ۳ ساعت کانت‌داون قسمت ۱۲ Re:Zero رو می‌فرستم."
                 )
             except:
                 pass
@@ -266,17 +266,17 @@ async def my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "**Re:Zero Countdown Bot Commands**\n\n"
-        "/start — Show welcome message\n"
-        "/countdown — Show current countdown\n"
-        "/random — Get a random Re:Zero sticker\n"
-        "/dmcountdown — Toggle DM notifications (private only)\n"
-        "/help — This message\n\n"
-        "**Group Features:**\n"
-        "• Add bot to group → auto countdown every 3h\n"
-        "• Random Re:Zero stickers included\n\n"
-        "**DM Features:**\n"
-        "• /dmcountdown → personal countdown every 3h",
+        "**دستورات ربات کانت‌داون Re:Zero**\\n\\n"
+        "/start — نمایش پیام خوش‌آمدگویی\\n"
+        "/countdown — نمایش کانت‌داون فعلی\\n"
+        "/random — ارسال یه استیکر رندوم Re:Zero\\n"
+        "/dmcountdown — فعال/غیرفعال کردن نوتیفیکیشن پیوی\\n"
+        "/help — این پیام\\n\\n"
+        "**قابلیت‌های گروه:**\\n"
+        "• ربات رو به گروه اضافه کن → کانت‌داون هر ۳ ساعت\\n"
+        "• استیکرهای رندوم Re:Zero\\n\\n"
+        "**قابلیت‌های پیوی:**\\n"
+        "• /dmcountdown → کانت‌داون شخصی هر ۳ ساعت",
         parse_mode="Markdown"
     )
 
