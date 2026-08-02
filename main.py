@@ -143,7 +143,7 @@ def check_random_rate(chat_id: int, user_id: int) -> tuple:
         remaining = int(rl["ban_until"] - now)
         mins = remaining // 60
         secs = remaining % 60
-        return False, f"⛔ دسترسی شما به مدت **{mins} دقیقه و {secs} ثانیه** بسته شده.\nدلیل: اسپم بیش از حد."
+        return False, f"⛔ دسترسی به /random به مدت **{mins} دقیقه و {secs} ثانیه** محدود شده.\nدلیل: اسپم بیش از حد."
 
     # Reset ban if expired
     if rl["ban_until"] > 0 and now >= rl["ban_until"]:
@@ -160,10 +160,10 @@ def check_random_rate(chat_id: int, user_id: int) -> tuple:
         if rl["spam"] >= SPAM_THRESHOLD:
             rl["ban_until"] = now + SPAM_BAN_DURATION
             rl["spam"] = 0
-            return False, f"⛔ دسترسی شما به مدت **۳۰ دقیقه** بسته شد.\nدلیل: اسپم بیش از حد (۳ بار پشت سر هم)."
+            return False, f"⛔ دسترسی به /random به مدت **۳۰ دقیقه** محدود شد.\nدلیل: اسپم بیش از حد (۳ بار پشت سر هم)."
 
         warns_left = SPAM_THRESHOLD - rl["spam"]
-        return False, f"⏳ لطفا **{remaining} ثانیه** صبر کنید.\n({warns_left} اخطار دیگه = بن ۳۰ دقیقه)"
+        return False, f"⏳ لطفا **{remaining} ثانیه** صبر کنید.\n({warns_left} اخطار دیگه = محدودیت ۳۰ دقیقه‌ای)"
 
     # Allowed
     rl["last"] = now
