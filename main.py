@@ -257,7 +257,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
             [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")],
             [InlineKeyboardButton("⚙️ تنظیمات", callback_data="open_settings")],
-            [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         
         text = (
@@ -326,16 +326,20 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_u")],
             [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_u")],
-            [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
     
     elif chat.type in ("group", "supergroup"):
         # Group chat - admin only
-        member = await context.bot.get_chat_member(chat.id, user.id)
-        if member.status not in ("administrator", "creator"):
-            await update.message.reply_text("فقط ادمین‌ها می‌تونن تنظیمات رو تغییر بدن!")
+        try:
+            member = await context.bot.get_chat_member(chat.id, user.id)
+            if member.status not in ("administrator", "creator"):
+                await update.message.reply_text("فقط ادمین‌ها می‌تونن تنظیمات رو تغییر بدن!")
+                return
+        except Exception:
+            await update.message.reply_text("خطا در بررسی دسترسی. ربات باید ادمین گروه باشه!")
             return
         
         s = get_group_settings(chat.id)
@@ -405,7 +409,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_u")],
             [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_u")],
-            [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
@@ -433,7 +437,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
             [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")],
             [InlineKeyboardButton("⚙️ تنظیمات", callback_data="open_settings")],
-            [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_start")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
@@ -484,6 +488,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("۶ ساعت", callback_data="cd_g_6")],
             [InlineKeyboardButton("۱۲ ساعت", callback_data="cd_g_12")],
             [InlineKeyboardButton("۲۴ ساعت", callback_data="cd_g_24")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
@@ -498,6 +503,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی کانت‌داون گروه: **{format_interval(hours)}**",
@@ -552,6 +558,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("۳۰ دقیقه", callback_data="sk_g_30")],
             [InlineKeyboardButton("۱ ساعت", callback_data="sk_g_60")],
             [InlineKeyboardButton("هر بار ارسال کانت‌داون (پیش‌فرض)", callback_data="sk_g_0")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
@@ -566,6 +573,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی استیکر گروه: **{format_sticker_interval(minutes)}**",
