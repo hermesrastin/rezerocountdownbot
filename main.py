@@ -379,6 +379,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
     else:
+        # Register group if not already in list
+        if chat.id not in groups:
+            groups.add(chat.id)
+            save_json(GROUPS_FILE, list(groups))
+            print(f"Group registered via /start: {chat.title} ({chat.id})")
         text = "ربات کانت‌داون Re:Zero فعاله! 📅\nهر ۳ ساعت کانت‌داون قسمت ۱۲ رو می‌فرستم."
         await update.message.reply_text(text)
 
@@ -412,7 +417,12 @@ async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
-    
+
+    # Register group on any interaction
+    if chat.type in ("group", "supergroup") and chat.id not in groups:
+        groups.add(chat.id)
+        save_json(GROUPS_FILE, list(groups))
+
     if chat.type == "private":
         s = get_user_settings(user.id)
         cd_text = format_interval(s["countdown_hours"])
@@ -697,6 +707,11 @@ async def random_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = chat.id
     reply_to = None
+
+    # Register group on any interaction
+    if chat.type in ("group", "supergroup") and chat.id not in groups:
+        groups.add(chat.id)
+        save_json(GROUPS_FILE, list(groups))
 
     if chat.type in ("group", "supergroup"):
         allowed, msg = check_random_rate(chat_id, user.id)
