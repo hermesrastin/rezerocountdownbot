@@ -4,6 +4,7 @@ import os
 import json
 import asyncio
 import random
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Set, Dict, List
 
@@ -22,7 +23,13 @@ TARGET_DATE = datetime(2026, 8, 12, 17, 0, 0, tzinfo=timezone.utc)
 # Data files
 GROUPS_FILE = "data/groups.json"
 USERS_FILE = "data/users.json"
-STICKER_PACK = "rasrez_by_fStikBot"
+STICKER_PACKS = [
+    "rasrez_by_fStikBot",
+    "b6a3b0ad87f4e5_by_anipackbot",
+    "RezeroByLimbo",
+    "Emiliatan_by_TgEmojis_bot",
+    "Echidna_Rezero_Otakuzdream",
+]
 
 # ========== DATA MANAGEMENT ==========
 def load_json(filepath: str, default):
@@ -38,6 +45,12 @@ def save_json(filepath: str, data):
 
 groups: Set[int] = set(load_json(GROUPS_FILE, []))
 dm_users: Set[int] = set(load_json(USERS_FILE, []))
+
+# Track last sent sticker per chat to avoid repeats
+last_sticker: Dict[int, str] = defaultdict(str)
+# Cached stickers from all packs
+all_stickers: List[str] = []
+stickers_loaded = False
 
 # ========== COUNTDOWN MESSAGE ==========
 def get_countdown_message() -> str:
@@ -63,17 +76,42 @@ def get_countdown_message() -> str:
 ╚══════════════════════╝"""
 
 # ========== STICKER HANDLING ==========
+async def load_all_stickers(bot):
+    """Load stickers from all packs into one big pool."""
+    global all_stickers, stickers_loaded
+    all_stickers = []
+    for pack_name in STICKER_PACKS:
+        try:
+            sticker_set = await bot.get_sticker_set(pack_name)
+            for s in sticker_set.stickers:
+                all_stickers.append(s.file_id)
+        except Exception as e:
+            print(f"Failed to load sticker pack {pack_name}: {e}")
+    stickers_loaded = True
+    print(f"Loaded {len(all_stickers)} stickers from {len(STICKER_PACKS)} packs")
+
 async def send_random_sticker(bot, chat_id: int) -> bool:
+    global all_stickers, stickers_loaded
     try:
-        # Get sticker set
-        stickers = await bot.get_sticker_set(STICKER_PACK)
-        if not stickers.stickers:
+        if not stickers_loaded or not all_stickers:
+            await load_all_stickers(bot)
+        if not all_stickers:
             return False
-        sticker = random.choice(stickers.stickers)
-        await bot.send_sticker(chat_id=chat_id, sticker=sticker.file_id)
+
+        # Pick a sticker different from the last one sent to this chat
+        last = last_sticker[chat_id]
+        candidates = [s for s in all_stickers if s != last] if last else all_stickers
+        if not candidates:
+            candidates = all_stickers
+        chosen = random.choice(candidates)
+        last_sticker[chat_id] = chosen
+
+        await bot.send_sticker(chat_id=chat_id, sticker=chosen)
         return True
     except Exception as e:
         print(f"Sticker error for {chat_id}: {e}")
+        # Reset cache on error
+        stickers_loaded = False
         return False
 
 # ========== SCHEDULED TASKS ==========
