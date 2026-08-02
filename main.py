@@ -17,9 +17,23 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+import urllib.request
+import re as re_mod
+
 # ========== CONFIG ==========
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-TARGET_DATE = datetime(2026, 8, 3, 12, 55, 0, tzinfo=timezone.utc)
+
+# LiveChart.me scraping config
+LIVECHART_ANIME_ID = 13115  # Re:Zero Season 4
+LIVECHART_URL = f"https://www.livechart.me/summer-2026/tv"
+LIVECHART_CACHE_FILE = "data/livechart_cache.json"
+
+# Fallback: hardcoded target (used if scraping fails)
+FALLBACK_TARGET = datetime(2026, 8, 12, 17, 0, 0, tzinfo=timezone.utc)
+
+# Cache for scraped target
+_target_cache = {"timestamp": 0, "target_epoch": 0}
+
 
 # Rate limit config
 RANDOM_COOLDOWN = 60
@@ -52,6 +66,46 @@ def save_json(filepath: str, data):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'w') as f:
         json.dump(data, f)
+
+# ========== LIVECHART SCRAPING ==========
+def fetch_target_date() -> datetime:
+    """Scrape livechart.me for next Re:Zero episode air time."""
+    global _target_cache
+    
+    now = time.time()
+    # Use cache if less than 1 hour old
+    if _target_cache["target_epoch"] > 0 and (now - _target_cache["timestamp"]) < 3600:
+        return datetime.fromtimestamp(_target_cache["target_epoch"], tz=timezone.utc)
+    
+    try:
+        # Load from file cache if available
+        file_cache = load_json(LIVECHART_CACHE_FILE, {})
+        if file_cache.get("target_epoch", 0) > 0 and (now - file_cache.get("timestamp", 0)) < 3600:
+            _target_cache = file_cache
+            return datetime.fromtimestamp(file_cache["target_epoch"], tz=timezone.utc)
+        
+        req = urllib.request.Request(LIVECHART_URL, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+        
+        # Find the anime card for Re:Zero by data-anime-id
+        pattern = rf'data-anime-id="{LIVECHART_ANIME_ID}".*?data-timestamp="(\d+)"'
+        match = re_mod.search(pattern, html, re_mod.DOTALL)
+        
+        if match:
+            epoch = int(match.group(1))
+            _target_cache = {"timestamp": now, "target_epoch": epoch}
+            # Save to file cache
+            save_json(LIVECHART_CACHE_FILE, _target_cache)
+            print(f"LiveChart: scraped target epoch {epoch} = {datetime.fromtimestamp(epoch, tz=timezone.utc)}")
+            return datetime.fromtimestamp(epoch, tz=timezone.utc)
+        else:
+            print(f"LiveChart: Re:Zero (id={LIVECHART_ANIME_ID}) not found on page, using fallback")
+    except Exception as e:
+        print(f"LiveChart scrape error: {e}, using fallback")
+    
+    # Return fallback
+    return FALLBACK_TARGET
 
 groups: Set[int] = set(load_json(GROUPS_FILE, []))
 dm_users: Set[int] = set(load_json(USERS_FILE, []))
@@ -170,15 +224,16 @@ def check_random_rate(chat_id: int, user_id: int) -> tuple:
 
 # ========== COUNTDOWN MESSAGE ==========
 def get_countdown_message() -> str:
+    target = fetch_target_date()
     now = datetime.now(timezone.utc)
-    diff = TARGET_DATE - now
+    diff = target - now
     total_seconds = int(diff.total_seconds())
     
     if total_seconds <= 0:
         return "🎉 Re:Zero Season 4 · Episode 12 is OUT NOW!"
     
     days = diff.days
-    hours = total_seconds // 3600
+    total_hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     
     return (
@@ -186,7 +241,7 @@ def get_countdown_message() -> str:
         "  ◈ Re:Zero · Season 4\n"
         "  ◈ Episode 12 Incoming\n"
         "╚══════════════════════╝\n\n"
-        f"  {days} days - {hours} hours and {minutes} minutes\n\n"
+        f"  {days} days - {total_hours} hours and {minutes} minutes\n\n"
         "  until the next episode drops\n\n"
         "╚══════════════════════╝"
     )
