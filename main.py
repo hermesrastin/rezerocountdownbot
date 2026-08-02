@@ -21,6 +21,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 TARGET_DATE = datetime(2026, 8, 12, 17, 0, 0, tzinfo=timezone.utc)
 
+# Rate limit config
+RANDOM_COOLDOWN = 60        # 1 minute between uses
+SPAM_THRESHOLD = 3          # 3 spam = ban
+SPAM_BAN_DURATION = 1800    # 30 minutes ban
+
 # Data files
 GROUPS_FILE = "data/groups.json"
 USERS_FILE = "data/users.json"
@@ -61,6 +66,9 @@ DEFAULT_STICKER_MINUTES = 0  # 0 = with every countdown
 # Cached stickers
 all_stickers: List[str] = []
 stickers_loaded = False
+
+# Rate limiting: key = "chat_id:user_id" -> {"last": timestamp, "spam": count, "ban_until": timestamp}
+random_ratelimit: Dict[str, Dict] = {}
 
 # ========== SETTINGS HELPERS ==========
 def get_user_settings(user_id: int) -> Dict:
@@ -119,6 +127,48 @@ def format_sticker_interval(minutes: int) -> str:
         return "هر ۱ ساعت"
     return f"هر {minutes} دقیقه"
 
+# ========== RATE LIMITING ==========
+def check_random_rate(chat_id: int, user_id: int) -> tuple:
+    """Check rate limit for /random. Returns (allowed: bool, message: str or None)."""
+    key = f"{chat_id}:{user_id}"
+    now = time.time()
+
+    if key not in random_ratelimit:
+        random_ratelimit[key] = {"last": 0, "spam": 0, "ban_until": 0}
+
+    rl = random_ratelimit[key]
+
+    # Check ban
+    if rl["ban_until"] > 0 and now < rl["ban_until"]:
+        remaining = int(rl["ban_until"] - now)
+        mins = remaining // 60
+        secs = remaining % 60
+        return False, f"⛔ دسترسی شما به مدت **{mins} دقیقه و {secs} ثانیه** بسته شده.\nدلیل: اسپم بیش از حد."
+
+    # Reset ban if expired
+    if rl["ban_until"] > 0 and now >= rl["ban_until"]:
+        rl["ban_until"] = 0
+        rl["spam"] = 0
+
+    # Check cooldown
+    elapsed = now - rl["last"]
+    if elapsed < RANDOM_COOLDOWN:
+        remaining = int(RANDOM_COOLDOWN - elapsed)
+        rl["spam"] += 1
+
+        # Check spam threshold
+        if rl["spam"] >= SPAM_THRESHOLD:
+            rl["ban_until"] = now + SPAM_BAN_DURATION
+            rl["spam"] = 0
+            return False, f"⛔ دسترسی شما به مدت **۳۰ دقیقه** بسته شد.\nدلیل: اسپم بیش از حد (۳ بار پشت سر هم)."
+
+        warns_left = SPAM_THRESHOLD - rl["spam"]
+        return False, f"⏳ لطفا **{remaining} ثانیه** صبر کنید.\n({warns_left} اخطار دیگه = بن ۳۰ دقیقه)"
+
+    # Allowed
+    rl["last"] = now
+    return True, None
+
 # ========== COUNTDOWN MESSAGE ==========
 def get_countdown_message() -> str:
     now = datetime.now(timezone.utc)
@@ -156,7 +206,7 @@ async def load_all_stickers(bot):
     stickers_loaded = True
     print(f"Loaded {len(all_stickers)} stickers from {len(STICKER_PACKS)} packs")
 
-async def send_random_sticker(bot, chat_id: int) -> bool:
+async def send_random_sticker(bot, chat_id: int, reply_to: int = None) -> bool:
     global all_stickers, stickers_loaded
     try:
         if not stickers_loaded or not all_stickers:
@@ -164,7 +214,10 @@ async def send_random_sticker(bot, chat_id: int) -> bool:
         if not all_stickers:
             return False
         chosen = random.choice(all_stickers)
-        await bot.send_sticker(chat_id=chat_id, sticker=chosen)
+        kwargs = {"chat_id": chat_id, "sticker": chosen}
+        if reply_to:
+            kwargs["reply_to_message_id"] = reply_to
+        await bot.send_sticker(**kwargs)
         return True
     except Exception as e:
         print(f"Sticker error for {chat_id}: {e}")
@@ -200,7 +253,6 @@ async def smart_scheduler(bot):
         except Exception as e:
             print(f"User {uid} error: {e}")
     
-    # Update dm_users list
     new_dm = set(active_users)
     if new_dm != dm_users:
         dm_users.intersection_update(new_dm)
@@ -212,7 +264,7 @@ async def smart_scheduler(bot):
     active_groups = []
     for gid in list(groups):
         g_settings = get_group_settings(gid)
-        g_ls = get_last_sent(gid + 1000000000)  # Offset to avoid collision with user IDs
+        g_ls = get_last_sent(gid + 1000000000)
         
         countdown_due = (now - g_ls["countdown"]) >= (g_settings["countdown_hours"] * 3600)
         sticker_due = g_settings["sticker_minutes"] == 0 or (now - g_ls["sticker"]) >= (g_settings["sticker_minutes"] * 60)
@@ -311,7 +363,6 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if chat.type == "private":
-        # Private chat - user settings
         s = get_user_settings(user.id)
         cd_text = format_interval(s["countdown_hours"])
         sk_text = format_sticker_interval(s["sticker_minutes"])
@@ -332,7 +383,6 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
     
     elif chat.type in ("group", "supergroup"):
-        # Group chat - admin only
         try:
             member = await context.bot.get_chat_member(chat.id, user.id)
             if member.status not in ("administrator", "creator"):
@@ -414,32 +464,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
     
-    # --- Back to Start ---
+    # --- Back to Start (dead code, kept for safety) ---
     if data == "back_to_start":
-        s = get_user_settings(user.id)
-        cd_text = format_interval(s["countdown_hours"])
-        sk_text = format_sticker_interval(s["sticker_minutes"])
-        
-        text = (
-            f"سلام {user.first_name}! 👋\n\n"
-            "من **ربات کانت‌داون Re:Zero** هستم — قسمت ۱۲ فصل ۴ رو دنبال می‌کنم.\n\n"
-            f"**وضعیت فعلی:**\n"
-            f"• کانت‌داون: {cd_text}\n"
-            f"• استیکر: {sk_text}\n\n"
-            "**قابلیت‌ها:**\n"
-            "• **در گروه‌ها:** کانت‌داون + استیکر رندوم\n"
-            "• **در پیوی:** کانت‌داون شخصی با تنظیمات دلخواه\n"
-            "• **/random** — یه استیکر رندوم Re:Zero\n"
-            "• **/settings** — تنظیمات ارسال\n\n"
-            "یکی از گزینه‌ها رو انتخاب کن:"
-        )
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-            [InlineKeyboardButton("🔔 فعال‌سازی کانت‌داون پیوی", callback_data="enable_dm")],
-            [InlineKeyboardButton("⚙️ تنظیمات", callback_data="open_settings")],
-            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
-        ])
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        await query.edit_message_text("✅ منو بسته شد.", reply_markup=None)
         return
     
     # --- Set Countdown Interval (User) ---
@@ -454,7 +481,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("۶ ساعت", callback_data="cd_u_6")],
             [InlineKeyboardButton("۱۲ ساعت", callback_data="cd_u_12")],
             [InlineKeyboardButton("۲۴ ساعت", callback_data="cd_u_24")],
-            [InlineKeyboardButton("🏠 بازگشت", callback_data="open_settings")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
@@ -468,6 +495,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی کانت‌داون: **{format_interval(hours)}**",
@@ -524,7 +552,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("۳۰ دقیقه", callback_data="sk_u_30")],
             [InlineKeyboardButton("۱ ساعت", callback_data="sk_u_60")],
             [InlineKeyboardButton("هر بار ارسال کانت‌داون (پیش‌فرض)", callback_data="sk_u_0")],
-            [InlineKeyboardButton("🏠 بازگشت", callback_data="open_settings")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
         return
@@ -538,6 +566,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🏠 بازگشت به تنظیمات", callback_data="open_settings")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
         ])
         await query.edit_message_text(
             f"✅ تنظیم شد!\n\nزمان‌بندی استیکر: **{format_sticker_interval(minutes)}**",
@@ -583,8 +612,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 async def random_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    await send_random_sticker(context.bot, chat_id)
+    chat = update.effective_chat
+    user = update.effective_user
+    chat_id = chat.id
+    reply_to = None
+
+    # Rate limiting only in groups
+    if chat.type in ("group", "supergroup"):
+        allowed, msg = check_random_rate(chat_id, user.id)
+        if not allowed:
+            await update.message.reply_text(msg, parse_mode="Markdown")
+            return
+        
+        # If command is a reply to a message, forward sticker as reply
+        if update.message and update.message.reply_to_message:
+            reply_to = update.message.reply_to_message.message_id
+    
+    # In DM, no rate limit but still support reply
+    elif chat.type == "private":
+        if update.message and update.message.reply_to_message:
+            reply_to = update.message.reply_to_message.message_id
+
+    await send_random_sticker(context.bot, chat_id, reply_to=reply_to)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -652,7 +701,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def post_init(application: Application):
     scheduler = AsyncIOScheduler()
     
-    # Smart scheduler: check every 10 minutes
     scheduler.add_job(
         smart_scheduler,
         IntervalTrigger(minutes=10),
