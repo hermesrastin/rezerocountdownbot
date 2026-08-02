@@ -45,7 +45,12 @@ STICKER_PACKS = [
     "RezeroByLimbo",
     "Emiliatan_by_TgEmojis_bot",
     "Echidna_Rezero_Otakuzdream",
+    "Makyowo",
 ]
+
+# Auto-reply limits: max replies per chat, resets after cooldown
+AUTO_REPLY_LIMIT = 2
+auto_reply_counter: Dict[int, Dict] = {}  # chat_id -> {"count": int, "reset_at": float}
 
 # ========== DATA MANAGEMENT ==========
 def load_json(filepath: str, default):
@@ -641,7 +646,17 @@ async def track_and_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Track every message in the group (last 7)
     track_group_message(chat_id, message.message_id)
 
-    # If someone replied to a bot message → send random sticker
+    # Check auto-reply limit (max 2 per chat, resets after 1 hour)
+    chat_id = chat.id
+    now = time.time()
+    if chat_id not in auto_reply_counter:
+        auto_reply_counter[chat_id] = {"count": 0, "reset_at": 0}
+    arc = auto_reply_counter[chat_id]
+    if now - arc["reset_at"] > 3600:
+        arc["count"] = 0
+        arc["reset_at"] = now
+
+    # If someone replied to a bot message → send random sticker (with limit)
     if message.reply_to_message:
         bot_id = context.bot_data.get("bot_id")
         if bot_id is None:
@@ -649,7 +664,9 @@ async def track_and_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.bot_data["bot_id"] = bot_id
         replied_to = message.reply_to_message
         if replied_to.from_user and replied_to.from_user.id == bot_id:
-            await send_random_sticker(context.bot, chat_id, reply_to=message.message_id)
+            if arc["count"] < AUTO_REPLY_LIMIT:
+                arc["count"] += 1
+                await send_random_sticker(context.bot, chat_id, reply_to=message.message_id)
 
 async def my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.my_chat_member
