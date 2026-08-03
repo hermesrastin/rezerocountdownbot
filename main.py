@@ -286,19 +286,21 @@ async def smart_scheduler(bot):
     for gid in list(groups):
         g_settings = get_group_settings(gid)
         g_ls = get_last_sent(gid + 1000000000)
+        cd_enabled = g_settings.get("countdown_enabled", True)
+        sk_enabled = g_settings.get("sticker_enabled", True)
         countdown_due = (now - g_ls["countdown"]) >= (g_settings["countdown_hours"] * 3600)
         sticker_due = g_settings["sticker_minutes"] == 0 or (now - g_ls["sticker"]) >= (g_settings["sticker_minutes"] * 60)
         try:
-            sticker_reply_to = pop_random_recent(gid) if sticker_due else None
+            sticker_reply_to = pop_random_recent(gid) if sticker_due and sk_enabled else None
 
-            if countdown_due:
+            if countdown_due and cd_enabled:
                 await bot.send_message(chat_id=gid, text=msg)
                 g_ls["countdown"] = now
                 active_groups.append(gid)
-                if sticker_due:
+                if sticker_due and sk_enabled:
                     await send_random_sticker(bot, gid, reply_to=sticker_reply_to)
                     g_ls["sticker"] = now
-            elif sticker_due and g_settings["sticker_minutes"] > 0:
+            elif sticker_due and g_settings["sticker_minutes"] > 0 and sk_enabled:
                 await send_random_sticker(bot, gid, reply_to=sticker_reply_to)
                 g_ls["sticker"] = now
             active_groups.append(gid)
@@ -414,27 +416,33 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def toggle_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
-    user = update.effective_user
-    if chat.type != "private":
-        await update.message.reply_text("این دستور فقط در پیوی کار می‌کنه!")
-        return
-    s = get_user_settings(user.id)
-    s["countdown_enabled"] = not s.get("countdown_enabled", True)
-    save_settings()
-    status = "✅ فعال شد" if s["countdown_enabled"] else "❌ غیرفعال شد"
-    await update.message.reply_text(f"ارسال کانت‌داون پیوی **{status}**.", parse_mode="Markdown")
+    if chat.type == "private":
+        s = get_user_settings(update.effective_user.id)
+        s["countdown_enabled"] = not s.get("countdown_enabled", True)
+        save_settings()
+        st = "✅ فعال شد" if s["countdown_enabled"] else "❌ غیرفعال شد"
+        await update.message.reply_text(f"ارسال کانت‌داون **{st}**.", parse_mode="Markdown")
+    elif chat.type in ("group", "supergroup"):
+        s = get_group_settings(chat.id)
+        s["countdown_enabled"] = not s.get("countdown_enabled", True)
+        save_group_settings()
+        st = "✅ فعال شد" if s["countdown_enabled"] else "❌ غیرفعال شد"
+        await update.message.reply_text(f"ارسال کانت‌داون گروه **{st}**.", parse_mode="Markdown")
 
 async def toggle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
-    user = update.effective_user
-    if chat.type != "private":
-        await update.message.reply_text("این دستور فقط در پیوی کار می‌کنه!")
-        return
-    s = get_user_settings(user.id)
-    s["sticker_enabled"] = not s.get("sticker_enabled", True)
-    save_settings()
-    status = "✅ فعال شد" if s["sticker_enabled"] else "❌ غیرفعال شد"
-    await update.message.reply_text(f"ارسال استیکر پیوی **{status}**.", parse_mode="Markdown")
+    if chat.type == "private":
+        s = get_user_settings(update.effective_user.id)
+        s["sticker_enabled"] = not s.get("sticker_enabled", True)
+        save_settings()
+        st = "✅ فعال شد" if s["sticker_enabled"] else "❌ غیرفعال شد"
+        await update.message.reply_text(f"ارسال استیکر **{st}**.", parse_mode="Markdown")
+    elif chat.type in ("group", "supergroup"):
+        s = get_group_settings(chat.id)
+        s["sticker_enabled"] = not s.get("sticker_enabled", True)
+        save_group_settings()
+        st = "✅ فعال شد" if s["sticker_enabled"] else "❌ غیرفعال شد"
+        await update.message.reply_text(f"ارسال استیکر گروه **{st}**.", parse_mode="Markdown")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -531,6 +539,53 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "back_to_start":
         await query.edit_message_text("✅ منو بسته شد.", reply_markup=None)
+        return
+
+    # ==================== GROUP TOGGLE ====================
+    if data == "toggle_cd_g":
+        chat = query.message.chat
+        s = get_group_settings(chat.id)
+        s["countdown_enabled"] = not s.get("countdown_enabled", True)
+        save_group_settings()
+        cd_on = "🟢" if s["countdown_enabled"] else "🔴"
+        sk_on = "🟢" if s.get("sticker_enabled", True) else "🔴"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"{cd_on} کانت‌داون گروه", callback_data="toggle_cd_g"),
+             InlineKeyboardButton(f"{sk_on} استیکر گروه", callback_data="toggle_sk_g")],
+            [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_g")],
+            [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_g")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
+        ])
+        await query.edit_message_text(
+            "⚙️ **تنظیمات ربات در گروه**\n\n"
+            f"**ارسال کانت‌داون:** {format_interval(s['countdown_hours'])}\n"
+            f"**ارسال استیکر:** {format_sticker_interval(s['sticker_minutes'])}\n\n"
+            "روی یکی از گزینه‌ها کلیک کن:",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
+        return
+
+    if data == "toggle_sk_g":
+        chat = query.message.chat
+        s = get_group_settings(chat.id)
+        s["sticker_enabled"] = not s.get("sticker_enabled", True)
+        save_group_settings()
+        cd_on = "🟢" if s.get("countdown_enabled", True) else "🔴"
+        sk_on = "🟢" if s["sticker_enabled"] else "🔴"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"{cd_on} کانت‌داون گروه", callback_data="toggle_cd_g"),
+             InlineKeyboardButton(f"{sk_on} استیکر گروه", callback_data="toggle_sk_g")],
+            [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_g")],
+            [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_g")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
+        ])
+        await query.edit_message_text(
+            "⚙️ **تنظیمات ربات در گروه**\n\n"
+            f"**ارسال کانت‌داون:** {format_interval(s['countdown_hours'])}\n"
+            f"**ارسال استیکر:** {format_sticker_interval(s['sticker_minutes'])}\n\n"
+            "روی یکی از گزینه‌ها کلیک کن:",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
         return
 
     # USER COUNTDOWN
@@ -742,7 +797,8 @@ async def track_and_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.bot_data["bot_id"] = bot_id
         replied_to = message.reply_to_message
         if replied_to.from_user and replied_to.from_user.id == bot_id:
-            if arc["count"] < AUTO_REPLY_LIMIT:
+            sk_enabled = get_group_settings(chat_id).get("sticker_enabled", True)
+            if arc["count"] < AUTO_REPLY_LIMIT and sk_enabled:
                 arc["count"] += 1
                 await send_random_sticker(context.bot, chat_id, reply_to=message.message_id)
 
