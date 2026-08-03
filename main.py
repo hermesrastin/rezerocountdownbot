@@ -134,12 +134,12 @@ def fetch_target_date() -> datetime:
 # ========== SETTINGS HELPERS ==========
 def get_user_settings(user_id: int) -> Dict:
     if user_id not in user_settings:
-        user_settings[user_id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+        user_settings[user_id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES, "countdown_enabled": True, "sticker_enabled": True}
     return user_settings[user_id]
 
 def get_group_settings(chat_id: int) -> Dict:
     if chat_id not in group_settings:
-        group_settings[chat_id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+        group_settings[chat_id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES, "countdown_enabled": True, "sticker_enabled": True}
     return group_settings[chat_id]
 
 def save_settings():
@@ -258,14 +258,16 @@ async def smart_scheduler(bot):
         ls = get_last_sent(uid)
         countdown_due = (now - ls["countdown"]) >= (settings["countdown_hours"] * 3600)
         sticker_due = settings["sticker_minutes"] == 0 or (now - ls["sticker"]) >= (settings["sticker_minutes"] * 60)
+        cd_enabled = settings.get("countdown_enabled", True)
+        sk_enabled = settings.get("sticker_enabled", True)
         try:
-            if countdown_due:
+            if countdown_due and cd_enabled:
                 await bot.send_message(chat_id=uid, text=get_countdown_message())
                 ls["countdown"] = now
-                if sticker_due:
+                if sticker_due and sk_enabled:
                     await send_random_sticker(bot, uid)
                     ls["sticker"] = now
-            elif sticker_due and settings["sticker_minutes"] > 0:
+            elif sticker_due and settings["sticker_minutes"] > 0 and sk_enabled:
                 await send_random_sticker(bot, uid)
                 ls["sticker"] = now
             active_users.append(uid)
@@ -410,6 +412,30 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
 
+async def toggle_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat.type != "private":
+        await update.message.reply_text("این دستور فقط در پیوی کار می‌کنه!")
+        return
+    s = get_user_settings(user.id)
+    s["countdown_enabled"] = not s.get("countdown_enabled", True)
+    save_settings()
+    status = "✅ فعال شد" if s["countdown_enabled"] else "❌ غیرفعال شد"
+    await update.message.reply_text(f"ارسال کانت‌داون پیوی **{status}**.", parse_mode="Markdown")
+
+async def toggle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat.type != "private":
+        await update.message.reply_text("این دستور فقط در پیوی کار می‌کنه!")
+        return
+    s = get_user_settings(user.id)
+    s["sticker_enabled"] = not s.get("sticker_enabled", True)
+    save_settings()
+    status = "✅ فعال شد" if s["sticker_enabled"] else "❌ غیرفعال شد"
+    await update.message.reply_text(f"ارسال استیکر پیوی **{status}**.", parse_mode="Markdown")
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -430,7 +456,59 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "برای تغییر زمان‌بندی از /settings استفاده کن.", parse_mode="Markdown"
             )
         return
+    # --- Toggle Countdown (User) ---
+    if data == "toggle_cd_u":
+        s = get_user_settings(user.id)
+        s["countdown_enabled"] = not s.get("countdown_enabled", True)
+        save_settings()
+        on = s["countdown_enabled"]
+        sk_on = "🟢" if s.get("sticker_enabled", True) else "🔴"
+        cd_on = "🟢" if on else "🔴"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"{cd_on} کانت‌داون پیوی", callback_data="toggle_cd_u"),
+             InlineKeyboardButton(f"{sk_on} استیکر پیوی", callback_data="toggle_sk_u")],
+            [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_u")],
+            [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_u")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
+        ])
+        cd_text = format_interval(s["countdown_hours"])
+        sk_text = format_sticker_interval(s["sticker_minutes"])
+        await query.edit_message_text(
+            "⚙️ **تنظیمات ربات**\n\n"
+            f"**ارسال کانت‌داون:** {cd_text}\n"
+            f"**ارسال استیکر:** {sk_text}\n\n"
+            "روی یکی از گزینه‌ها کلیک کن:",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
+        return
 
+    # --- Toggle Sticker (User) ---
+    if data == "toggle_sk_u":
+        s = get_user_settings(user.id)
+        s["sticker_enabled"] = not s.get("sticker_enabled", True)
+        save_settings()
+        on = s["sticker_enabled"]
+        sk_on = "🟢" if on else "🔴"
+        cd_on = "🟢" if s.get("countdown_enabled", True) else "🔴"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"{cd_on} کانت‌داون پیوی", callback_data="toggle_cd_u"),
+             InlineKeyboardButton(f"{sk_on} استیکر پیوی", callback_data="toggle_sk_u")],
+            [InlineKeyboardButton("⏰ زمان‌بندی کانت‌داون", callback_data="set_countdown_u")],
+            [InlineKeyboardButton("🎨 زمان‌بندی استیکر", callback_data="set_sticker_u")],
+            [InlineKeyboardButton("✖️ بستن منو", callback_data="close_menu")],
+        ])
+        cd_text = format_interval(s["countdown_hours"])
+        sk_text = format_sticker_interval(s["sticker_minutes"])
+        await query.edit_message_text(
+            "⚙️ **تنظیمات ربات**\n\n"
+            f"**ارسال کانت‌داون:** {cd_text}\n"
+            f"**ارسال استیکر:** {sk_text}\n\n"
+            "روی یکی از گزینه‌ها کلیک کن:",
+            reply_markup=keyboard, parse_mode="Markdown"
+        )
+        return
+
+    # --- Close Menu ---
     if data == "close_menu":
         await query.edit_message_text("✅ منو بسته شد.", reply_markup=None)
         return
@@ -473,7 +551,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("cd_u_"):
         hours = int(data.split("_")[2])
         if user.id not in user_settings:
-            user_settings[user.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+            user_settings[user.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES, "countdown_enabled": True, "sticker_enabled": True}
         user_settings[user.id]["countdown_hours"] = hours
         save_settings()
         s = get_user_settings(user.id)
@@ -509,7 +587,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hours = int(data.split("_")[2])
         chat = query.message.chat
         if chat.id not in group_settings:
-            group_settings[chat.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+            group_settings[chat.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES, "countdown_enabled": True, "sticker_enabled": True}
         group_settings[chat.id]["countdown_hours"] = hours
         save_group_settings()
         cur = get_group_settings(chat.id)["countdown_hours"]
@@ -542,7 +620,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("sk_u_"):
         minutes = int(data.split("_")[2])
         if user.id not in user_settings:
-            user_settings[user.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+            user_settings[user.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES, "countdown_enabled": True, "sticker_enabled": True}
         user_settings[user.id]["sticker_minutes"] = minutes
         save_settings()
         cur = get_user_settings(user.id)["sticker_minutes"]
@@ -576,7 +654,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         minutes = int(data.split("_")[2])
         chat = query.message.chat
         if chat.id not in group_settings:
-            group_settings[chat.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES}
+            group_settings[chat.id] = {"countdown_hours": DEFAULT_COUNTDOWN_HOURS, "sticker_minutes": DEFAULT_STICKER_MINUTES, "countdown_enabled": True, "sticker_enabled": True}
         group_settings[chat.id]["sticker_minutes"] = minutes
         save_group_settings()
         cur = get_group_settings(chat.id)["sticker_minutes"]
@@ -735,6 +813,8 @@ def main():
     application.add_handler(CommandHandler("dmcountdown", dm_countdown))
     application.add_handler(CommandHandler("random", random_sticker))
     application.add_handler(CommandHandler("settings", settings))
+    application.add_handler(CommandHandler("togglecountdown", toggle_countdown))
+    application.add_handler(CommandHandler("togglesticker", toggle_sticker))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(ChatMemberHandler(my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
     application.add_handler(MessageHandler(filters.REPLY & filters.ChatType.GROUPS, track_and_reply))
