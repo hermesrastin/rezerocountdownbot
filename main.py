@@ -253,7 +253,7 @@ def get_countdown_message() -> str:
                 f"  ◇ {next_time}\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━"
                 f"```"
-                f"\n\n🌐 [AnimeGate](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414) — زیرنویس فارسی از اینجا شروع میشه"
+                f"\n\n👉 [Watch here](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414) — subs available shortly"
             )
         else:
             # Celebration window over — auto-increment episode
@@ -328,7 +328,7 @@ async def smart_scheduler(bot):
         sk_enabled = settings.get("sticker_enabled", True)
         try:
             if countdown_due and cd_enabled:
-                await bot.send_message(chat_id=uid, text=get_countdown_message())
+                await bot.send_message(chat_id=uid, text=get_countdown_message(), disable_web_page_preview=True)
                 ls["countdown"] = now
                 if sticker_due and sk_enabled:
                     await send_random_sticker(bot, uid)
@@ -360,7 +360,7 @@ async def smart_scheduler(bot):
             sticker_reply_to = pop_random_recent(gid) if sticker_due and sk_enabled else None
 
             if countdown_due and cd_enabled:
-                await bot.send_message(chat_id=gid, text=msg)
+                await bot.send_message(chat_id=gid, text=msg, disable_web_page_preview=True)
                 g_ls["countdown"] = now
                 active_groups.append(gid)
                 if sticker_due and sk_enabled:
