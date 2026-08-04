@@ -225,21 +225,37 @@ def get_countdown_message() -> str:
 
         if time_since_recorded < CELEBRATION_HOURS:
             # 🎉 CELEBRATION MODE
-            # Compute approximate next-episode countdown from celebration end
-            # Use the same target (which already points to next episode from livechart)
             next_remaining = target - now
             nr_total = int(next_remaining.total_seconds())
             if nr_total > 0:
                 nr_days = next_remaining.days
                 nr_hours = nr_total // 3600
-                next_line = f"Next episode in: {nr_days} days, {nr_hours} hours"
+                nr_minutes = (nr_total % 3600) // 60
+                next_time = f"{nr_days}d {nr_hours}h {nr_minutes}m"
             else:
-                next_line = "Next episode date updating soon..."
+                next_time = "..."
             return (
-                f"🎉🎊 RE:ZERO EPISODE {ep} IS HERE! 🎉🎊\n\n"
-                f"✨ The new episode just dropped! ✨\n\n"
-                f"Don't miss it — go watch now!\n\n"
-                f"{next_line}"
+                "╔══════════════════════════╗\n"
+                "║  🎉🎊  EPISODE DROP!  🎊🎉 ║\n"
+                "╠══════════════════════════╣\n"
+                "║                            ║\n"
+                f"║  ◈ Re:Zero · Season 4      ║\n"
+                f"║  ◈ Episode {ep} is OUT!     ║\n"
+                "║                            ║\n"
+                "╠══════════════════════════╣\n"
+                "║  ✨ جدیدترین اپیزود رسید!  ║\n"
+                "║  🍿 بریم تماشا کنیم!        ║\n"
+                "║                            ║\n"
+                "║  📌 زیرنویس فارسی           ║\n"
+                "║  تا چند ساعت دیگه           ║\n"
+                "║  در دسترس قرار میگیره       ║\n"
+                "║  منتظرش باشید! ⏳          ║\n"
+                "║                            ║\n"
+                "╠══════════════════════════╣\n"
+                "║  ⏰ تا اپیزود بعدی:        ║\n"
+                f"║  ▸ {next_time}               ║\n"
+                "║                            ║\n"
+                "╚══════════════════════════╝"
             )
         else:
             # Celebration window over — auto-increment episode
