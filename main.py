@@ -246,7 +246,7 @@ def get_countdown_message() -> str:
                 f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"\n"
                 f"  → Persian subs in the coming hours\n"
-                f"  → Watch it [**here**](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414) once translated\n"
+                f"  → Watch it here once translated\n"
                 f"\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"  Next episode:\n"
