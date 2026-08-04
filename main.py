@@ -245,15 +245,14 @@ def get_countdown_message() -> str:
                 f"\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"\n"
-                f"  → New episode aired\n"
-                f"  → Sub available soon\n"
-                f"  → Stay tuned\n"
+                f"  → زیرنویس فارسی ساعات آینده\n"
                 f"\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"  Next episode:\n"
                 f"  ◇ {next_time}\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━"
                 f"```"
+                f"\n\n🌐 [AnimeGate](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414) — زیرنویس فارسی از اینجا شروع میشه"
             )
         else:
             # Celebration window over — auto-increment episode
