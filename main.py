@@ -38,6 +38,8 @@ USERS_FILE = "data/users.json"
 SETTINGS_FILE = "data/settings.json"
 GROUP_SETTINGS_FILE = "data/group_settings.json"
 LAST_SENT_FILE = "data/last_sent.json"
+EPISODE_STATE_FILE = "data/episode_state.json"
+CELEBRATION_HOURS = 5
 
 STICKER_PACKS = [
     "rasrez_by_fStikBot",
@@ -69,6 +71,7 @@ dm_users: Set[int] = set(load_json(USERS_FILE, []))
 user_settings: Dict[int, Dict] = load_json(SETTINGS_FILE, {})
 group_settings: Dict[int, Dict] = load_json(GROUP_SETTINGS_FILE, {})
 last_sent: Dict[int, Dict] = load_json(LAST_SENT_FILE, {})
+episode_state: Dict = load_json(EPISODE_STATE_FILE, {"current_episode": 12, "last_episode_time": 0})
 
 DEFAULT_COUNTDOWN_HOURS = 3
 DEFAULT_STICKER_MINUTES = 10
@@ -156,6 +159,12 @@ def get_last_sent(user_id: int) -> Dict:
 def save_last_sent():
     save_json(LAST_SENT_FILE, last_sent)
 
+def get_current_episode() -> int:
+    return episode_state.get("current_episode", 12)
+
+def save_episode_state():
+    save_json(EPISODE_STATE_FILE, episode_state)
+
 def format_interval(hours: int) -> str:
     m = {1: "هر ۱ ساعت", 3: "هر ۳ ساعت", 6: "هر ۶ ساعت", 12: "هر ۱۲ ساعت", 24: "هر ۲۴ ساعت"}
     return m.get(hours, f"هر {hours} ساعت")
@@ -196,19 +205,62 @@ def check_random_rate(chat_id: int, user_id: int) -> tuple:
 
 # ========== COUNTDOWN MESSAGE ==========
 def get_countdown_message() -> str:
+    ep = get_current_episode()
     target = fetch_target_date()
     now = datetime.now(timezone.utc)
     diff = target - now
     total_seconds = int(diff.total_seconds())
+
+    # Episode just aired — within CELEBRATION_HOURS window
     if total_seconds <= 0:
-        return "🎉 Re:Zero Season 4 · Episode 12 is OUT NOW!"
+        last_time = episode_state.get("last_episode_time", 0)
+
+        if last_time == 0:
+            # First detection that episode aired — record the time
+            episode_state["last_episode_time"] = time.time()
+            save_episode_state()
+            last_time = episode_state["last_episode_time"]
+
+        time_since_recorded = (time.time() - last_time) / 3600
+
+        if time_since_recorded < CELEBRATION_HOURS:
+            # 🎉 CELEBRATION MODE
+            # Compute approximate next-episode countdown from celebration end
+            # Use the same target (which already points to next episode from livechart)
+            next_remaining = target - now
+            nr_total = int(next_remaining.total_seconds())
+            if nr_total > 0:
+                nr_days = next_remaining.days
+                nr_hours = nr_total // 3600
+                next_line = f"Next episode in: {nr_days} days, {nr_hours} hours"
+            else:
+                next_line = "Next episode date updating soon..."
+            return (
+                f"🎉🎊 RE:ZERO EPISODE {ep} IS HERE! 🎉🎊\n\n"
+                f"✨ The new episode just dropped! ✨\n\n"
+                f"Don't miss it — go watch now!\n\n"
+                f"{next_line}"
+            )
+        else:
+            # Celebration window over — auto-increment episode
+            episode_state["current_episode"] = ep + 1
+            episode_state["last_episode_time"] = 0
+            save_episode_state()
+            ep = get_current_episode()
+            # Re-fetch target for new episode
+            target = fetch_target_date()
+            diff = target - now
+            total_seconds = int(diff.total_seconds())
+            if total_seconds <= 0:
+                return f"🎉 Re:Zero Season 4 · Episode {ep} is OUT NOW!"
+
     days = diff.days
     total_hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     return (
         "╔══════════════════════╗\n"
         "  ◈ Re:Zero · Season 4\n"
-        "  ◈ Episode 12 Incoming\n"
+        f"  ◈ Episode {ep} Incoming\n"
         "╚══════════════════════╝\n\n"
         f"  {days} days - {total_hours} hours and {minutes} minutes\n\n"
         "  until the next episode drops\n\n"
@@ -336,7 +388,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         text = (
             f"سلام {user.first_name}! 👋\n\n"
-            "من **ربات کانت‌داون Re:Zero** هستم — قسمت ۱۲ فصل ۴ رو دنبال می‌کنم.\n\n"
+            f"من **ربات کانت‌داون Re:Zero** هستم — قسمت {get_current_episode()} فصل ۴ رو دنبال می‌کنم.\n\n"
             f"**وضعیت فعلی:**\n• کانت‌داون: {cd_text}\n• استیکر: {sk_text}\n\n"
             "**قابلیت‌ها:**\n"
             "• **در گروه‌ها:** کانت‌داون + استیکر رندوم\n"
@@ -350,7 +402,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if chat.id not in groups:
             groups.add(chat.id)
             save_json(GROUPS_FILE, list(groups))
-        await update.message.reply_text("ربات کانت‌داون Re:Zero فعاله! 📅\nهر ۳ ساعت کانت‌داون قسمت ۱۲ رو می‌فرستم.")
+        ep = get_current_episode()
+        await update.message.reply_text(f"ربات کانت‌داون Re:Zero فعاله! 📅\nهر ۳ ساعت کانت‌داون قسمت {ep} رو می‌فرستم.")
 
 async def dm_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -813,7 +866,8 @@ async def my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_json(GROUPS_FILE, list(groups))
             print(f"Added to group: {chat.title} ({chat.id})")
             try:
-                await context.bot.send_message(chat_id=chat.id, text="ممنون که منو اضافه کردی! 🎉\nهر ۳ ساعت کانت‌داون قسمت ۱۲ Re:Zero رو می‌فرستم.")
+                ep = get_current_episode()
+                await context.bot.send_message(chat_id=chat.id, text=f"ممنون که منو اضافه کردی! 🎉\nهر ۳ ساعت کانت‌داون قسمت {ep} Re:Zero رو می‌فرستم.")
             except:
                 pass
     elif new_status in ("left", "kicked") and old_status in ("member", "administrator"):
