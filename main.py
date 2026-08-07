@@ -235,7 +235,6 @@ def get_countdown_message() -> str:
             else:
                 next_time = "..."
             return (
-                f"```"
                 f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"  ◈ EPISODE DROP ◈\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -252,8 +251,6 @@ def get_countdown_message() -> str:
                 f"  Next episode:\n"
                 f"  ◇ {next_time}\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━"
-                f"```"
-
             )
         else:
             # Celebration window over — auto-increment episode
