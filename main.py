@@ -39,7 +39,7 @@ SETTINGS_FILE = "data/settings.json"
 GROUP_SETTINGS_FILE = "data/group_settings.json"
 LAST_SENT_FILE = "data/last_sent.json"
 EPISODE_STATE_FILE = "data/episode_state.json"
-CELEBRATION_HOURS = 5
+CELEBRATION_HOURS = 12
 
 STICKER_PACKS = [
     "rasrez_by_fStikBot",
