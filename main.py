@@ -84,7 +84,6 @@ FAREWELL_MESSAGE = (
     "  and watching up to this point.\n"
     "  We hope Season 5 continues soon!\n"
     "\n"
-    "  → Watch it [here](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414)\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 )
 DEFAULT_STICKER_MINUTES = 10
