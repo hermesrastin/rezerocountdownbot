@@ -82,8 +82,9 @@ FAREWELL_MESSAGE = (
     "\n"
     "  Thank you all for being with us\n"
     "  and watching up to this point.\n"
-    "\n"
     "  We hope Season 5 continues soon!\n"
+    "\n"
+    "  → Watch it [here](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414)\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 )
 DEFAULT_STICKER_MINUTES = 10
@@ -237,6 +238,7 @@ def get_countdown_message() -> str:
 
         if time_since_recorded < CELEBRATION_HOURS:
             # 🎉 CELEBRATION MODE
+            is_final = ep >= MAX_EPISODE
             next_remaining = target - now
             nr_total = int(next_remaining.total_seconds())
             if nr_total > 0:
@@ -246,24 +248,47 @@ def get_countdown_message() -> str:
                 next_time = f"{nr_days}d {nr_hours}h {nr_minutes}m"
             else:
                 next_time = "..."
-            return (
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"  ◈ EPISODE DROP ◈\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"\n"
-                f"  Re:Zero · Season 4\n"
-                f"  Episode {ep} — OUT NOW\n"
-                f"\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"\n"
-                f"  → Persian subs in the coming hours\n"
-                f"  → Watch it [here](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414) once translated\n"
-                f"\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"  Next episode:\n"
-                f"  ◇ {next_time}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━"
-            )
+            if is_final:
+                # Final episode celebration — include farewell
+                return (
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"  ◈ EPISODE DROP ◈\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"\n"
+                    f"  Re:Zero · Season 4\n"
+                    f"  Episode {ep} — OUT NOW\n"
+                    f"\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"\n"
+                    f"  → Persian subs in the coming hours\n"
+                    f"  → Watch it [here](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414) once translated\n"
+                    f"\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"  Thank you all for being with us\n"
+                    f"  and watching up to this point.\n"
+                    f"  We hope Season 5 continues soon!\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                )
+            else:
+                # Normal episode celebration
+                return (
+                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"  ◈ EPISODE DROP ◈\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"\n"
+                    f"  Re:Zero · Season 4\n"
+                    f"  Episode {ep} — OUT NOW\n"
+                    f"\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"\n"
+                    f"  → Persian subs in the coming hours\n"
+                    f"  → Watch it [here](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414) once translated\n"
+                    f"\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"  Next episode:\n"
+                    f"  ◇ {next_time}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━"
+                )
         else:
             # Celebration window over
             if ep >= MAX_EPISODE:
