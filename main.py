@@ -71,9 +71,21 @@ dm_users: Set[int] = set(load_json(USERS_FILE, []))
 user_settings: Dict[int, Dict] = load_json(SETTINGS_FILE, {})
 group_settings: Dict[int, Dict] = load_json(GROUP_SETTINGS_FILE, {})
 last_sent: Dict[int, Dict] = load_json(LAST_SENT_FILE, {})
-episode_state: Dict = load_json(EPISODE_STATE_FILE, {"current_episode": 12, "last_episode_time": 0})
+episode_state: Dict = load_json(EPISODE_STATE_FILE, {"current_episode": 19, "last_episode_time": 0})
 
 DEFAULT_COUNTDOWN_HOURS = 3
+MAX_EPISODE = 19
+FAREWELL_MESSAGE = (
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "  ◈ RE:ZERO SEASON 4 — COMPLETE ◈\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "\n"
+    "  Thank you all for being with us\n"
+    "  and watching up to this point.\n"
+    "\n"
+    "  We hope Season 5 continues soon!\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+)
 DEFAULT_STICKER_MINUTES = 10
 
 all_stickers: List[str] = []
@@ -253,17 +265,22 @@ def get_countdown_message() -> str:
                 f"━━━━━━━━━━━━━━━━━━━━━━━"
             )
         else:
-            # Celebration window over — auto-increment episode
-            episode_state["current_episode"] = ep + 1
-            episode_state["last_episode_time"] = 0
-            save_episode_state()
-            ep = get_current_episode()
-            # Re-fetch target for new episode
-            target = fetch_target_date()
-            diff = target - now
-            total_seconds = int(diff.total_seconds())
-            if total_seconds <= 0:
-                return f"🎉 Re:Zero Season 4 · Episode {ep} is OUT NOW!"
+            # Celebration window over
+            if ep >= MAX_EPISODE:
+                # Final episode — show farewell
+                return FAREWELL_MESSAGE
+            else:
+                # Auto-increment episode
+                episode_state["current_episode"] = ep + 1
+                episode_state["last_episode_time"] = 0
+                save_episode_state()
+                ep = get_current_episode()
+                # Re-fetch target for new episode
+                target = fetch_target_date()
+                diff = target - now
+                total_seconds = int(diff.total_seconds())
+                if total_seconds <= 0:
+                    return f"🎉 Re:Zero Season 4 · Episode {ep} is OUT NOW!"
 
     days = diff.days
     total_hours = total_seconds // 3600
