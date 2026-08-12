@@ -224,8 +224,9 @@ def get_countdown_message() -> str:
     diff = target - now
     total_seconds = int(diff.total_seconds())
 
-    # Episode just aired — within CELEBRATION_HOURS window
-    if total_seconds <= 0:
+    # If episode is 12 and target is in the future (meaning ep 12 already aired and target is for ep 13)
+    # or total_seconds <= 0 (just aired)
+    if total_seconds <= 0 or (ep == 12 and episode_state.get("last_episode_time", 0) > 0):
         last_time = episode_state.get("last_episode_time", 0)
 
         if last_time == 0:
