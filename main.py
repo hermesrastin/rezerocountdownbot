@@ -291,14 +291,8 @@ def get_countdown_message() -> str:
                 )
         else:
             # Celebration window over
-            if ep == 12:
-                # Episode 12 completed — show farewell then move to 13
-                episode_state["current_episode"] = 13
-                episode_state["last_episode_time"] = 0
-                save_episode_state()
-                return FAREWELL_MESSAGE
-            elif ep >= MAX_EPISODE:
-                # Final episode (beyond 19) — show farewell
+            if ep >= MAX_EPISODE:
+                # Final episode — show farewell
                 return FAREWELL_MESSAGE
             else:
                 # Auto-increment episode
