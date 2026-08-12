@@ -133,8 +133,13 @@ def fetch_target_date() -> datetime:
         req = urllib.request.Request(LIVECHART_URL, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             html = resp.read().decode("utf-8", errors="replace")
-        pattern = rf'data-countdown-bar-timestamp="(\d+)"'
+        pattern = rf'data-anime-id="{LIVECHART_ANIME_ID}".*?data-timestamp="(\d+)"'
+        # Try to find specifically Re:Zero 4th season (id 13115)
         match = re_mod.search(pattern, html, re_mod.DOTALL)
+        if not match:
+             # Fallback to general countdown pattern if specific id fails
+             pattern = r'data-anime-card-target="countdown" data-timestamp="(\d+)"'
+             match = re_mod.search(pattern, html, re_mod.DOTALL)
         if match:
             epoch = int(match.group(1))
             _target_cache = {"timestamp": now, "target_epoch": epoch}
