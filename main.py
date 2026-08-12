@@ -71,7 +71,7 @@ dm_users: Set[int] = set(load_json(USERS_FILE, []))
 user_settings: Dict[int, Dict] = load_json(SETTINGS_FILE, {})
 group_settings: Dict[int, Dict] = load_json(GROUP_SETTINGS_FILE, {})
 last_sent: Dict[int, Dict] = load_json(LAST_SENT_FILE, {})
-episode_state: Dict = load_json(EPISODE_STATE_FILE, {"current_episode": 19, "last_episode_time": 0})
+episode_state: Dict = load_json(EPISODE_STATE_FILE, {"current_episode": 12, "last_episode_time": 0})
 
 DEFAULT_COUNTDOWN_HOURS = 3
 MAX_EPISODE = 19
@@ -84,6 +84,7 @@ FAREWELL_MESSAGE = (
     "  and watching up to this point.\n"
     "  We hope Season 5 continues soon!\n"
     "\n"
+    "  → Watch it [here](https://animegate.net/anime/rezero-kara-hajimeru-isekai-seikatsu-4th-season-21414)\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 )
 DEFAULT_STICKER_MINUTES = 10
@@ -290,8 +291,14 @@ def get_countdown_message() -> str:
                 )
         else:
             # Celebration window over
-            if ep >= MAX_EPISODE:
-                # Final episode — show farewell
+            if ep == 12:
+                # Episode 12 completed — show farewell then move to 13
+                episode_state["current_episode"] = 13
+                episode_state["last_episode_time"] = 0
+                save_episode_state()
+                return FAREWELL_MESSAGE
+            elif ep >= MAX_EPISODE:
+                # Final episode (beyond 19) — show farewell
                 return FAREWELL_MESSAGE
             else:
                 # Auto-increment episode
