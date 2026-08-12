@@ -133,7 +133,7 @@ def fetch_target_date() -> datetime:
         req = urllib.request.Request(LIVECHART_URL, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             html = resp.read().decode("utf-8", errors="replace")
-        pattern = rf'data-anime-id="{LIVECHART_ANIME_ID}".*?data-timestamp="(\d+)"'
+        pattern = rf'data-countdown-bar-timestamp="(\d+)"'
         match = re_mod.search(pattern, html, re_mod.DOTALL)
         if match:
             epoch = int(match.group(1))
